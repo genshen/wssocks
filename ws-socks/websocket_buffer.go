@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"github.com/gorilla/websocket"
+	"github.com/segmentio/ksuid"
 	"log"
 	"sync"
 )
@@ -26,6 +27,7 @@ func (w *WebSocketBufferWriter) Write(p []byte) (int, error) {
 }
 
 // flush all data in this buff into WebSocket.
+// deprecated
 func (w *WebSocketBufferWriter) Flush(messageType int, ws *websocket.Conn) error {
 	if w.buffer.Len() != 0 {
 		w.mu.Lock()
@@ -44,17 +46,18 @@ type Base64WSBufferWriter struct {
 	WebSocketBufferWriter
 }
 
-func (b *Base64WSBufferWriter) Flush(messageType int, ws *websocket.Conn) error {
+func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cwi ConcurrentWebSocketInterface) error {
 	if b.buffer.Len() != 0 {
 		b.mu.Lock()
 		defer b.mu.Unlock()
 
 		dataBase64 := base64.StdEncoding.EncodeToString(b.buffer.Bytes())
-		jsonData := WebSocketMessage{
-			Type: WebSocketMessageTypeRequest,
+		jsonData := WebSocketMessage2{
+			Id:   id.String(),
+			Type: WsTpData,
 			Data: RequestMessage{DataBase64: dataBase64},
 		}
-		err := ws.WriteJSON(&jsonData)
+		err := cwi.WriteWSJSON(&jsonData)
 		if err != nil {
 			return err
 		}

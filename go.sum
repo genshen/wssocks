@@ -2,3 +2,5 @@ github.com/genshen/cmds v0.0.0-20181110071553-72099a07a84d h1:tlQcG70GfH1gr3DXjQ
 github.com/genshen/cmds v0.0.0-20181110071553-72099a07a84d/go.mod h1:Uo2P6VGNS7t++sjm8vO2AqK/AB2v/favOgOZB984Z3o=
 github.com/gorilla/websocket v1.4.0 h1:WDFjx/TMzVgy9VdMMQi2K2Emtwi2QcUQsztZ/zLaH/Q=
 github.com/gorilla/websocket v1.4.0/go.mod h1:E7qHFY5m1UJ88s3WnNqhKjPHQ0heANvMoAMk2YaljkQ=
+github.com/segmentio/ksuid v1.0.2 h1:9yBfKyw4ECGTdALaF09Snw3sLJmYIX6AbPJrAy6MrDc=
+github.com/segmentio/ksuid v1.0.2/go.mod h1:BXuJDr2byAiHuQaQtSKoXh1J0YmUDurywOXgB2w+OSU=
