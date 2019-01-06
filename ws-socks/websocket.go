@@ -9,8 +9,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
+
+const TimerDuration = 60                  // millisecond
+const TimeOuts = 6 * 1000 / TimerDuration // 6 seconds
 
 var upgrader = websocket.Upgrader{} // use default options
 
@@ -41,6 +45,7 @@ func ServeWs(w http.ResponseWriter, r *http.Request) {
 	go func() { // read messages from webSocket
 		defer setDone()
 		for {
+			log.Println("conn size: ", sws.GetConnectorSize())
 			_, p, err := ws.ReadMessage()
 			// if WebSocket is closed by some reason, then this func will return,
 			// and 'done' channel will be set, the outer func will reach to the end.
@@ -63,27 +68,49 @@ type Connector struct {
 	sendBuffer Base64WSBufferWriter
 	Conn       *net.TCPConn
 	Id         ksuid.KSUID
+	closeable  bool
 }
 
 type ServerWS struct {
 	ConcurrentWebSocket
-	conns map[ksuid.KSUID]*Connector // fixme fix error: concurrent map writes
+	mu    sync.RWMutex
+	conns map[ksuid.KSUID]*Connector
 }
 
 func (s *ServerWS) NewConn(id ksuid.KSUID, conn *net.TCPConn) *Connector {
-	connector := Connector{Id: id, Conn: conn}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	connector := Connector{Id: id, Conn: conn, closeable: true}
 	s.conns[id] = &connector
 	return &connector
 }
 
-func (s *ServerWS) Close(id ksuid.KSUID) error {
+func (s *ServerWS) GetConnectorById(id ksuid.KSUID) *Connector {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if connector, ok := s.conns[id]; ok {
-		if err := connector.Conn.Close(); err != nil {
-			delete(s.conns, id)
-			return err
-		} else {
-			delete(s.conns, id)
+		return connector
+	}
+	return nil
+}
+
+func (s *ServerWS) GetConnectorSize() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.conns)
+}
+
+func (s *ServerWS) Close(id ksuid.KSUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if connector, ok := s.conns[id]; ok {
+		if connector.closeable { // todo set closeable to false in map
+			if err := connector.Conn.Close(); err != nil {
+				delete(s.conns, id)
+				return err
+			}
 		}
+		delete(s.conns, id)
 	}
 	return nil
 }
@@ -108,13 +135,16 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	}
 	switch socketStream.Type {
 	case WsTpClose: // closed by client
-
+		s.Close(id)
 	case WsTpEst: // establish
 		var proxyMsg ProxyMessage
 		if err := json.Unmarshal(socketData, &proxyMsg); err != nil {
 			return nil
 		} else {
-			go s.establish(id, proxyMsg.Addr) // todo error handle
+			go func() {
+				s.establish(id, proxyMsg.Addr) // todo error handle
+				s.tellClosed(id)
+			}()
 		}
 	case WsTpData:
 		var requestMsg RequestMessage
@@ -122,12 +152,31 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 			return nil
 		}
 
-		if connector, ok := s.conns[id]; ok {
-			go s.forData(connector, &requestMsg)
+		if connector := s.GetConnectorById(id); connector != nil {
+			go func() {
+				if err := s.forData(connector, &requestMsg); err != nil {
+					log.Println(err)
+					s.tellClosed(id)
+					s.Close(id) // also closed= tcp connection if it exists
+				}
+			}()
 		}
 		return nil
 	}
 	return nil
+}
+
+// the the client the connection has been closed
+func (s *ServerWS) tellClosed(id ksuid.KSUID) {
+	// send finish flag to client
+	finish := WebSocketMessage2{
+		Id:   id.String(),
+		Type: WsTpClose,
+		Data: nil,
+	}
+	if err := s.WriteWSJSON(&finish); err != nil {
+		return
+	}
 }
 
 func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
@@ -135,27 +184,29 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 	tcpConn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
 	if err != nil {
 		log.Println(err)
-		return nil
+		return err
 	}
 
 	connector := s.NewConn(id, tcpConn.(*net.TCPConn))
-	defer s.Close(id) // also close tcp connection, todo error
+	defer log.Println("info", "disconnected to:", addr)
+	defer s.Close(id)
 
 	if _, err := connector.sendBuffer.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 		return err
 	}
 	log.Println("info", "connected to:", addr)
 
+	defer connector.sendBuffer.Flush(websocket.TextMessage, id, &(s.ConcurrentWebSocket))
 	stopper := make(chan bool)
 	go func() {
 		// defer setDone()
-		tick := time.NewTicker(time.Millisecond * time.Duration(10))
+		tick := time.NewTicker(time.Millisecond * time.Duration(60))
 		//for range time.Tick(120 * time.Millisecond){}
 		defer tick.Stop()
 		for {
 			select {
 			case <-tick.C:
-				if err := connector.sendBuffer.Flush(websocket.TextMessage, id, &(s.ConcurrentWebSocket)); err != nil {
+				if _, err := connector.sendBuffer.Flush(websocket.TextMessage, id, &(s.ConcurrentWebSocket)); err != nil {
 					log.Println("Error: error sending data via webSocket:", err)
 					return
 				}
@@ -166,14 +217,15 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 	}()
 
 	if _, err := io.Copy(&connector.sendBuffer, connector.Conn); err != nil {
-		return nil
+		stopper <- true
+		return err
 	}
+
 	stopper <- true
 	return nil
 }
 
 func (s *ServerWS) forData(connector *Connector, message *RequestMessage) error {
-	log.Println("send data from client to remote")
 	// copy data
 	if decodeBytes, err := base64.StdEncoding.DecodeString(message.DataBase64); err != nil {
 		log.Println("bash64 decode error,", err)

@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
-	"log"
 	"sync"
 )
 
@@ -36,7 +35,6 @@ func (w *WebSocketBufferWriter) Flush(messageType int, ws *websocket.Conn) error
 		if err != nil {
 			return err
 		}
-		log.Println("write buffer", w.buffer.Len())
 		w.buffer.Reset()
 	}
 	return nil
@@ -46,8 +44,10 @@ type Base64WSBufferWriter struct {
 	WebSocketBufferWriter
 }
 
-func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cwi ConcurrentWebSocketInterface) error {
-	if b.buffer.Len() != 0 {
+// flush all data in this buff into WebSocket.
+func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cwi ConcurrentWebSocketInterface) (int, error) {
+	length := b.buffer.Len()
+	if length != 0 {
 		b.mu.Lock()
 		defer b.mu.Unlock()
 
@@ -59,10 +59,9 @@ func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cwi Concur
 		}
 		err := cwi.WriteWSJSON(&jsonData)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		log.Println("flush length ", b.buffer.Len())
 		b.buffer.Reset()
 	}
-	return nil
+	return length, nil
 }

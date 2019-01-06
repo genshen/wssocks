@@ -30,13 +30,16 @@ func (client *Client) Start() {
 	go wsc.ListenIncomeMsg()
 
 	for {
+		log.Println("size of connector:", wsc.ConnSize())
 		c, err := s.Accept()
 		if err != nil {
 			log.Panic(err)
 		}
 		go client.proxy(c, func(conn *net.TCPConn, addr string) error {
 			proxy := wsc.NewProxy(conn)
-			return proxy.Serve(&wsc, addr)
+			proxy.Serve(&wsc, addr)
+			wsc.TellClose(proxy.Id)
+			return nil // todo error
 		})
 	}
 }

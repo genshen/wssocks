@@ -6,11 +6,20 @@ import (
 	"github.com/segmentio/ksuid"
 	"log"
 	"net"
+	"sync"
 )
 
 type WebSocketClient struct {
 	ConcurrentWebSocket
 	proxies map[ksuid.KSUID]*Proxy
+	mu      sync.RWMutex
+}
+
+// get the connection size
+func (wsc *WebSocketClient) ConnSize() int {
+	wsc.mu.RLock()
+	defer wsc.mu.RUnlock()
+	return len(wsc.proxies)
 }
 
 // establish websocket connection
@@ -25,11 +34,25 @@ func (wsc *WebSocketClient) Connect(addr string) {
 }
 
 // create a new proxy with unique id
-func (wsc *WebSocketClient) NewProxy(conn *net.TCPConn, ) *Proxy {
+func (wsc *WebSocketClient) NewProxy(conn *net.TCPConn) *Proxy {
 	id := ksuid.New()
 	proxy := Proxy{Id: id, Conn: conn}
+	proxy.isClosed = false
+
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+
 	wsc.proxies[id] = &proxy
 	return &proxy
+}
+
+func (wsc *WebSocketClient) GetProxyById(id ksuid.KSUID) *Proxy {
+	wsc.mu.RLock()
+	defer wsc.mu.RUnlock()
+	if proxy, ok := wsc.proxies[id]; ok {
+		return proxy
+	}
+	return nil
 }
 
 // listen income websocket message and dispatch to different proxies.
@@ -37,7 +60,7 @@ func (wsc *WebSocketClient) ListenIncomeMsg() {
 	for {
 		_, data, err := wsc.WsConn.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
+			log.Println("error websocket read:", err) // todo close all
 			return
 		}
 
@@ -53,25 +76,46 @@ func (wsc *WebSocketClient) ListenIncomeMsg() {
 			if ksid, err := ksuid.Parse(id); err != nil {
 				continue
 			} else {
-				if proxy, ok := wsc.proxies[ksid]; !ok {
-					continue
-				} else {
+				if proxy := wsc.GetProxyById(ksid); proxy != nil {
 					// now, we known the id and type of incoming data
 					switch socketStream.Type {
 					case WsTpClose: // remove proxy
-						proxy.Close()
-						delete(wsc.proxies, ksid)
-						// todo notice closing
+						wsc.Close(ksid)
 					case WsTpData:
 						var proxyData ProxyData
 						if err := json.Unmarshal(socketData, &proxyData); err != nil {
+							wsc.Close(ksid)
 							continue
 						}
-						proxy.DispatchData(&proxyData) // todo error, e.g connection closed
+						if err := proxy.DispatchData(&proxyData); err != nil {
+							wsc.Close(ksid)
+							continue
+						}
 					}
 				}
-
 			}
 		}
+	}
+}
+
+func (wsc *WebSocketClient) TellClose(id ksuid.KSUID) error {
+	// send finish flag to client
+	finish := WebSocketMessage2{
+		Id:   id.String(),
+		Type: WsTpClose,
+		Data: nil,
+	}
+	if err := wsc.WriteWSJSON(&finish); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (wsc *WebSocketClient) Close(id ksuid.KSUID) {
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+	if proxy, ok := wsc.proxies[id]; ok {
+		proxy.Close()
+		delete(wsc.proxies, id)
 	}
 }
