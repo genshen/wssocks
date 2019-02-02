@@ -40,7 +40,7 @@ func (client *Client) Start() {
 		if err != nil {
 			log.Panic(err)
 		}
-		go client.proxy(c, func(conn *net.TCPConn, addr string) error {
+		go client.Response(c, func(conn *net.TCPConn, addr string) error {
 			proxy := wsc.NewProxy(conn)
 			proxy.Serve(&wsc, tick, addr)
 			wsc.TellClose(proxy.Id)
@@ -49,7 +49,7 @@ func (client *Client) Start() {
 	}
 }
 
-func (client *Client) proxy(conn net.Conn, onDial func(conn *net.TCPConn, addr string) error) {
+func (client *Client) Response(conn net.Conn, onDial func(conn *net.TCPConn, addr string) error) {
 	defer conn.Close()
 	var b [1024]byte
 

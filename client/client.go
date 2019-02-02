@@ -6,7 +6,7 @@ import (
 	"github.com/genshen/ws-socks/ws-socks"
 )
 
-var versionCommand = &cmds.Command{
+var clientCommand = &cmds.Command{
 	Name:        "client",
 	Summary:     "run as client mode",
 	Description: "run as client program.",
@@ -15,20 +15,20 @@ var versionCommand = &cmds.Command{
 }
 
 func init() {
-	versionCommand.Runner = &version{}
+	clientCommand.Runner = &client{}
 	fs := flag.NewFlagSet("client", flag.ExitOnError)
-	versionCommand.FlagSet = fs
-	versionCommand.FlagSet.Usage = versionCommand.Usage // use default usage provided by cmds.Command.
-	cmds.AllCommands = append(cmds.AllCommands, versionCommand)
+	clientCommand.FlagSet = fs
+	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.
+	cmds.AllCommands = append(cmds.AllCommands, clientCommand)
 }
 
-type version struct{}
+type client struct{}
 
-func (v *version) PreRun() error {
+func (v *client) PreRun() error {
 	return nil
 }
 
-func (v *version) Run() error {
+func (v *client) Run() error {
 	client := ws_socks.Client{
 		Config: ws_socks.ClientConfig{
 			LocalAddr: "localhost:1080", ServerAddr: "ws://proxy.gensh.me:10000",
