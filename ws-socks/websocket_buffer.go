@@ -3,7 +3,6 @@ package ws_socks
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	"sync"
 )
@@ -13,35 +12,16 @@ import (
 
 // write data to WebSocket
 // the data comes from ssh server.
-type WebSocketBufferWriter struct {
+type Base64WSBufferWriter struct {
 	buffer bytes.Buffer
 	mu     sync.Mutex
 }
 
 // implement Write interface to write bytes from ssh server into bytes.Buffer.
-func (w *WebSocketBufferWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.buffer.Write(p)
-}
-
-// flush all data in this buff into WebSocket.
-// deprecated
-func (w *WebSocketBufferWriter) Flush(messageType int, ws *websocket.Conn) error {
-	if w.buffer.Len() != 0 {
-		w.mu.Lock()
-		defer w.mu.Unlock()
-		err := ws.WriteMessage(messageType, w.buffer.Bytes())
-		if err != nil {
-			return err
-		}
-		w.buffer.Reset()
-	}
-	return nil
-}
-
-type Base64WSBufferWriter struct {
-	WebSocketBufferWriter
+func (b *Base64WSBufferWriter) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.Write(p)
 }
 
 // flush all data in this buff into WebSocket.

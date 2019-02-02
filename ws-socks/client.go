@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/genshen/ws-socks/ws-socks/ticker"
 	"log"
 	"net"
 )
@@ -29,6 +30,10 @@ func (client *Client) Start() {
 	defer wsc.WSClose()
 	go wsc.ListenIncomeMsg()
 
+	tick := ticker.NewTicker()
+	tick.Start()
+	defer tick.Stop()
+
 	for {
 		log.Println("size of connector:", wsc.ConnSize())
 		c, err := s.Accept()
@@ -37,7 +42,7 @@ func (client *Client) Start() {
 		}
 		go client.proxy(c, func(conn *net.TCPConn, addr string) error {
 			proxy := wsc.NewProxy(conn)
-			proxy.Serve(&wsc, addr)
+			proxy.Serve(&wsc, tick, addr)
 			wsc.TellClose(proxy.Id)
 			return nil // todo error
 		})

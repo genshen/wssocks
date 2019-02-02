@@ -2,12 +2,12 @@ package ws_socks
 
 import (
 	"encoding/base64"
+	"github.com/genshen/ws-socks/ws-socks/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	"io"
 	"log"
 	"net"
-	"time"
 )
 
 type Proxy struct {
@@ -40,7 +40,7 @@ func (p *Proxy) Close() {
 }
 
 // handel socket dial results processing
-func (p *Proxy) Serve(wsc *WebSocketClient, addr string) error {
+func (p *Proxy) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
 	log.Println("dialing to", addr)
 	defer log.Println("closing", addr)
 	defer wsc.Close(p.Id)
@@ -52,32 +52,42 @@ func (p *Proxy) Serve(wsc *WebSocketClient, addr string) error {
 	}
 	log.Println("connected to", addr)
 
-	done := make(chan bool)
-	var buffer Base64WSBufferWriter
-	defer buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
+	if tick == nil {
+		var buffer Base64WSBufferWriter
+		defer buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
 
-	go func() {
-		ticker := time.NewTicker(time.Microsecond * time.Duration(60))
-		defer ticker.Stop()
+		defer tick.Remove(ticker.TickId(p.Id))
+		tick.Append(ticker.TickId(p.Id), func() { // fixme return error
+			_, err := buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
+			if err != nil {
+				log.Println("write:", err) // todo use of closed network connection
+			}
+		}) // todo p.id
+
+		if _, err := io.Copy(&buffer, p.Conn); err != nil { // copy data to buffer
+			log.Println("io copy error,", err)
+			return nil
+		}
+	} else {
+		var buffer = make([]byte, 1024*64)
 		for {
-			select {
-			case <-done:
-				log.Println("done")
-				return // todo error back
-			case <-ticker.C:
-				_, err := buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
+			if n, err := p.Conn.Read(buffer); err != nil {
+				break
+				// log.Println("read error:", err)
+			} else if n > 0 {
+				dataBase64 := base64.StdEncoding.EncodeToString(buffer[0:n])
+				jsonData := WebSocketMessage2{
+					Id:   p.Id.String(),
+					Type: WsTpData,
+					Data: RequestMessage{DataBase64: dataBase64},
+				}
+				err := wsc.ConcurrentWebSocket.WriteWSJSON(&jsonData)
 				if err != nil {
-					log.Println("write:", err) // todo use of closed network connection
+					log.Println("write:", err)
 				}
 			}
 		}
-	}()
-
-	if _, err := io.Copy(&buffer, p.Conn); err != nil { // copy data to buffer
-		log.Println("io copy error,", err)
-		done <- true
-		return nil
 	}
-	done <- true
+
 	return nil
 }
