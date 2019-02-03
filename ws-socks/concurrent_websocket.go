@@ -1,7 +1,9 @@
 package ws_socks
 
 import (
+	"encoding/base64"
 	"github.com/gorilla/websocket"
+	"github.com/segmentio/ksuid"
 	"sync"
 )
 
@@ -18,6 +20,21 @@ type ConcurrentWebSocket struct {
 // close websocket connection
 func (wsc *ConcurrentWebSocket) WSClose() error {
 	return wsc.WsConn.Close()
+}
+
+// write message to websocket, the data is fixed format @WebSocketMessage
+// id: connection id
+// data: data to be written
+func (wsc *ConcurrentWebSocket) WriteMessage(id ksuid.KSUID, data []byte) error {
+	dataBase64 := base64.StdEncoding.EncodeToString(data)
+	jsonData := WebSocketMessage{
+		Id:   id.String(),
+		Type: WsTpData,
+		Data: RequestMessage{DataBase64: dataBase64},
+	}
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+	return wsc.WsConn.WriteJSON(jsonData)
 }
 
 // send data to websocket

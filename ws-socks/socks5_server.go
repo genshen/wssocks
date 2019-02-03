@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 )
@@ -76,7 +75,8 @@ func (client *Client) Reply(conn net.Conn, onDial func(conn *net.TCPConn, addr s
 	if err != nil {
 		return err
 	}
-	addr = fmt.Sprintf("%s:%d", host, port)
+
+	addr = net.JoinHostPort(host,port)
 	if err := onDial(conn.(*net.TCPConn), addr); err != nil {
 		return err
 	}

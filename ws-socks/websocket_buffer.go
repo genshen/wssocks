@@ -7,11 +7,7 @@ import (
 	"sync"
 )
 
-// copy data from WebSocket to ssh server
-// and copy data from ssh server to WebSocket
-
-// write data to WebSocket
-// the data comes from ssh server.
+// write data to WebSocket server or client
 type Base64WSBufferWriter struct {
 	buffer bytes.Buffer
 	mu     sync.Mutex

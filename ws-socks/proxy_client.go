@@ -10,14 +10,15 @@ import (
 	"net"
 )
 
-type Proxy struct {
+// proxy client handle one connection, send data to proxy server vai websocket.
+type ProxyClient struct {
 	Conn     *net.TCPConn
 	Id       ksuid.KSUID
 	isClosed bool
 }
 
 // can't do large compute or communication here
-func (p *Proxy) DispatchData(data *ProxyData) error {
+func (p *ProxyClient) DispatchData(data *ProxyData) error {
 	// decode base64
 	if decodeBytes, err := base64.StdEncoding.DecodeString(data.DataBase64); err != nil { // todo ignore error
 		log.Println("bash64 decode error,", err)
@@ -31,7 +32,8 @@ func (p *Proxy) DispatchData(data *ProxyData) error {
 	return nil
 }
 
-func (p *Proxy) Close() {
+// close (tcp) connection
+func (p *ProxyClient) Close() {
 	if p.isClosed {
 		return
 	}
@@ -40,14 +42,15 @@ func (p *Proxy) Close() {
 }
 
 // handel socket dial results processing
-func (p *Proxy) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
+// copy income connection data to proxy serve via websocket
+func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
 	log.Println("dialing to", addr)
 	defer log.Println("closing", addr)
 	defer wsc.Close(p.Id)
 
 	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyMessage{Addr: addr}}
 	if err := wsc.WriteWSJSON(&addrSend); err != nil {
-		log.Println(err)
+		log.Println("json error:",err)
 		return err
 	}
 	log.Println("connected to", addr)
@@ -76,19 +79,12 @@ func (p *Proxy) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) er
 				break
 				// log.Println("read error:", err)
 			} else if n > 0 {
-				dataBase64 := base64.StdEncoding.EncodeToString(buffer[0:n])
-				jsonData := WebSocketMessage{
-					Id:   p.Id.String(),
-					Type: WsTpData,
-					Data: RequestMessage{DataBase64: dataBase64},
-				}
-				err := wsc.ConcurrentWebSocket.WriteWSJSON(&jsonData)
-				if err != nil {
+				if err := wsc.WriteMessage(p.Id, buffer[:n]); err != nil {
 					log.Println("write:", err)
+					break
 				}
 			}
 		}
 	}
-
 	return nil
 }
