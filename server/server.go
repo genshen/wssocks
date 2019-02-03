@@ -4,9 +4,9 @@ import (
 	"flag"
 	"github.com/genshen/cmds"
 	"github.com/genshen/ws-socks/ws-socks"
-	"github.com/genshen/ws-socks/ws-socks/ticker"
 	"log"
 	"net/http"
+	"time"
 )
 
 var serverCommand = &cmds.Command{
@@ -22,6 +22,7 @@ func init() {
 	fs := flag.NewFlagSet("server", flag.ExitOnError)
 	serverCommand.FlagSet = fs
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
+	serverCommand.FlagSet.IntVar(&s.ticker, "ticker", 0, `ticker(ms) to send data to client.`)
 	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
 
 	serverCommand.Runner = &s
@@ -30,20 +31,22 @@ func init() {
 
 type server struct {
 	address string
+	ticker  int
 }
 
-func (v *server) PreRun() error {
+func (s *server) PreRun() error {
 	return nil
 }
 
-func (v *server) Run() error {
-	// new time ticker to flush data into websocket (to client).
-	tick := ticker.NewTicker()
-	tick.Start()
-	defer tick.Stop()
+func (s *server) Run() error {
+	if s.ticker != 0 {
+		ticker := ws_socks.StartTicker(time.Microsecond * time.Duration(100))
+		defer ticker.Stop()
+	}
 
+	// new time ticker to flush data into websocket (to client).
 	http.HandleFunc("/", ws_socks.ServeWs)
-	log.Println("listening on ", v.address)
-	log.Fatal(http.ListenAndServe(v.address, nil))
+	log.Println("listening on ", s.address)
+	log.Fatal(http.ListenAndServe(s.address, nil))
 	return nil
 }

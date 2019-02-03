@@ -6,6 +6,7 @@ import (
 	"github.com/segmentio/ksuid"
 	"log"
 	"net"
+	"net/http"
 	"sync"
 )
 
@@ -23,9 +24,9 @@ func (wsc *WebSocketClient) ConnSize() int {
 }
 
 // establish websocket connection
-func (wsc *WebSocketClient) Connect(addr string) {
+func (wsc *WebSocketClient) Connect(addr string, header http.Header) {
 	log.Println("connecting to ", addr)
-	ws, _, err := websocket.DefaultDialer.Dial(addr, nil)
+	ws, _, err := websocket.DefaultDialer.Dial(addr, header)
 	if err != nil {
 		log.Fatal("establishing connection error:", err)
 	}
@@ -85,7 +86,7 @@ func (wsc *WebSocketClient) ListenIncomeMsg() {
 		_, data, err := wsc.WsConn.ReadMessage()
 		if err != nil {
 			log.Println("error websocket read:", err) // todo close all
-			return // todo close websocket
+			return                                    // todo close websocket
 		}
 
 		var socketData json.RawMessage

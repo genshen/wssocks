@@ -25,9 +25,9 @@ func NewTicker() *Ticker {
 }
 
 // start the Ticker until receiving 'done' message
-func (t *Ticker) Start() {
+func (t *Ticker) Start(d time.Duration) {
 	go func() {
-		ticker := time.NewTicker(time.Microsecond * time.Duration(100))
+		ticker := time.NewTicker(d)
 		defer ticker.Stop()
 		for {
 			select {

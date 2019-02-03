@@ -1,12 +1,16 @@
 package client
 
 import (
+	"errors"
 	"flag"
 	"github.com/genshen/cmds"
 	"github.com/genshen/ws-socks/ws-socks"
 	"github.com/genshen/ws-socks/ws-socks/ticker"
 	"log"
 	"net"
+	"net/http"
+	"net/url"
+	"time"
 )
 
 var clientCommand = &cmds.Command{
@@ -18,28 +22,49 @@ var clientCommand = &cmds.Command{
 }
 
 func init() {
-	clientCommand.Runner = &client{}
+	var client client
 	fs := flag.NewFlagSet("client", flag.ExitOnError)
 	clientCommand.FlagSet = fs
+	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5.`)
+	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
+	clientCommand.FlagSet.IntVar(&client.ticker, "ticker", 0, `ticker(ms) to send data to client.`)
+
 	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.
+	clientCommand.Runner = &client
+
 	cmds.AllCommands = append(cmds.AllCommands, clientCommand)
 }
 
-type client struct{}
+type client struct {
+	address      string
+	remote       string
+	ticker       int
+	remoteUrl    *url.URL
+	remoteHeader http.Header // header in websocket request(default is nil)
+}
 
-func (v *client) PreRun() error {
+func (c *client) PreRun() error {
+	// check remote address
+	if c.remote == "" {
+		return errors.New("empty remote address")
+	}
+	if u, err := url.Parse(c.remote); err != nil {
+		return err
+	} else {
+		c.remoteUrl = u
+	}
 	return nil
 }
 
-func (v *client) Run() error {
+func (c *client) Run() error {
 	client := ws_socks.Client{
 		Config: ws_socks.ClientConfig{
-			LocalAddr: "localhost:1080", ServerAddr: "ws://proxy.gensh.me:10000",
+			LocalAddr: c.address, ServerAddr: c.remoteUrl,
 		}}
 
 	// start websocket connection (to remote server).
 	wsc := ws_socks.WebSocketClient{}
-	wsc.Connect(client.Config.ServerAddr)
+	wsc.Connect(client.Config.ServerAddr.String(), c.remoteHeader)
 	log.Println("connected")
 	// todo chan for wsc and tcp accept
 	defer wsc.WSClose()
@@ -47,9 +72,12 @@ func (v *client) Run() error {
 	go wsc.ListenIncomeMsg()
 
 	// new time ticker to flush data into websocket (server).
-	tick := ticker.NewTicker()
-	tick.Start()
-	defer tick.Stop()
+	var tick *ticker.Ticker = nil
+	if c.ticker != 0 {
+		tick = ticker.NewTicker()
+		tick.Start(time.Microsecond * time.Duration(100))
+		defer tick.Stop()
+	}
 
 	// start listen for socks5 connection.
 	s, err := net.Listen("tcp", client.Config.LocalAddr)

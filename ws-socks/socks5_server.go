@@ -6,11 +6,13 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/url"
+	"strconv"
 )
 
 type ClientConfig struct {
 	LocalAddr  string // "host:port"
-	ServerAddr string
+	ServerAddr *url.URL
 }
 
 // client part of socks5 server
@@ -45,22 +47,22 @@ func (client *Client) Reply(conn net.Conn, onDial func(conn *net.TCPConn, addr s
 		return err
 	}
 
-	var host, port string
+	var host string
 	switch buffer[3] {
 	case 0x01:
 		// ipv4 address
-		addr := make([]byte, 4)
-		if _, err := io.ReadAtLeast(bytes.NewReader(buffer[4:]), addr, len(addr)); err != nil {
+		ipv4 := make([]byte, 4)
+		if _, err := io.ReadAtLeast(bytes.NewReader(buffer[4:]), ipv4, len(ipv4)); err != nil {
 			return err
 		}
-		host = net.IP(addr).String()
+		host = net.IP(ipv4).String()
 	case 0x04:
 		// ipv6
-		addr := make([]byte, 16)
-		if _, err := io.ReadAtLeast(bytes.NewReader(buffer[4:]), addr, len(addr)); err != nil {
+		ipv6 := make([]byte, 16)
+		if _, err := io.ReadAtLeast(bytes.NewReader(buffer[4:]), ipv6, len(ipv6)); err != nil {
 			return err
 		}
-		host = net.IP(addr).String()
+		host = net.IP(ipv6).String()
 	case 0x03:
 		// domain
 		addrLen := int(buffer[4])
@@ -71,16 +73,16 @@ func (client *Client) Reply(conn net.Conn, onDial func(conn *net.TCPConn, addr s
 		host = string(domain)
 	}
 
+	port := make([]byte, 2)
 	err = binary.Read(bytes.NewReader(buffer[n-2:n]), binary.BigEndian, &port)
 	if err != nil {
 		return err
 	}
 
-	addr = net.JoinHostPort(host,port)
+	addr = net.JoinHostPort(host, strconv.Itoa((int(port[0])<<8)|int(port[1])))
 	if err := onDial(conn.(*net.TCPConn), addr); err != nil {
 		return err
 	}
-	//client.localDail(conn.(*net.TCPConn), addr)
 
 	return nil
 }
