@@ -63,12 +63,17 @@ func (v *client) Run() error {
 			log.Panic(err)
 			break
 		}
-		go client.Response(c, func(conn *net.TCPConn, addr string) error {
-			proxy := wsc.NewProxy(conn)
-			proxy.Serve(&wsc, tick, addr)
-			wsc.TellClose(proxy.Id)
-			return nil // todo error
-		})
+		go func() {
+			err := client.Reply(c, func(conn *net.TCPConn, addr string) error {
+				proxy := wsc.NewProxy(conn)
+				proxy.Serve(&wsc, tick, addr)
+				wsc.TellClose(proxy.Id)
+				return nil // todo error
+			})
+			if err != nil {
+				log.Println(err)
+			}
+		}()
 	}
 	return nil
 }
