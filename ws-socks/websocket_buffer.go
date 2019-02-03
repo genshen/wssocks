@@ -32,7 +32,7 @@ func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cwi Concur
 		defer b.mu.Unlock()
 
 		dataBase64 := base64.StdEncoding.EncodeToString(b.buffer.Bytes())
-		jsonData := WebSocketMessage2{
+		jsonData := WebSocketMessage{
 			Id:   id.String(),
 			Type: WsTpData,
 			Data: RequestMessage{DataBase64: dataBase64},

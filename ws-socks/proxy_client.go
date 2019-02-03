@@ -11,10 +11,9 @@ import (
 )
 
 type Proxy struct {
-	Conn       *net.TCPConn
-	Id         ksuid.KSUID
-	SendBuffer Base64WSBufferWriter
-	isClosed   bool
+	Conn     *net.TCPConn
+	Id       ksuid.KSUID
+	isClosed bool
 }
 
 // can't do large compute or communication here
@@ -24,6 +23,7 @@ func (p *Proxy) DispatchData(data *ProxyData) error {
 		log.Println("bash64 decode error,", err)
 		return err // skip error
 	} else {
+		// just write data back
 		if _, err := p.Conn.Write(decodeBytes); err != nil {
 			return err
 		}
@@ -45,14 +45,14 @@ func (p *Proxy) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) er
 	defer log.Println("closing", addr)
 	defer wsc.Close(p.Id)
 
-	addrSend := WebSocketMessage2{Type: WsTpEst, Id: p.Id.String(), Data: ProxyMessage{Addr: addr}}
+	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyMessage{Addr: addr}}
 	if err := wsc.WriteWSJSON(&addrSend); err != nil {
 		log.Println(err)
 		return err
 	}
 	log.Println("connected to", addr)
 
-	if tick == nil {
+	if tick != nil {
 		var buffer Base64WSBufferWriter
 		defer buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
 
@@ -69,6 +69,7 @@ func (p *Proxy) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) er
 			return nil
 		}
 	} else {
+		// dont use ticker
 		var buffer = make([]byte, 1024*64)
 		for {
 			if n, err := p.Conn.Read(buffer); err != nil {
@@ -76,7 +77,7 @@ func (p *Proxy) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) er
 				// log.Println("read error:", err)
 			} else if n > 0 {
 				dataBase64 := base64.StdEncoding.EncodeToString(buffer[0:n])
-				jsonData := WebSocketMessage2{
+				jsonData := WebSocketMessage{
 					Id:   p.Id.String(),
 					Type: WsTpData,
 					Data: RequestMessage{DataBase64: dataBase64},

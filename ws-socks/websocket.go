@@ -118,7 +118,7 @@ func (s *ServerWS) Close(id ksuid.KSUID) error {
 // in this case, one ws only handle one proxy.
 func (s *ServerWS) dispatchMessage(data []byte) error {
 	var socketData json.RawMessage
-	socketStream := WebSocketMessage2{
+	socketStream := WebSocketMessage{
 		Data: &socketData,
 	}
 	if err := json.Unmarshal(data, &socketStream); err != nil {
@@ -169,7 +169,7 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 // the the client the connection has been closed
 func (s *ServerWS) tellClosed(id ksuid.KSUID) {
 	// send finish flag to client
-	finish := WebSocketMessage2{
+	finish := WebSocketMessage{
 		Id:   id.String(),
 		Type: WsTpClose,
 		Data: nil,

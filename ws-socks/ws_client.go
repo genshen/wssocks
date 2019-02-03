@@ -11,8 +11,8 @@ import (
 
 type WebSocketClient struct {
 	ConcurrentWebSocket
-	proxies map[ksuid.KSUID]*Proxy
-	mu      sync.RWMutex
+	proxies map[ksuid.KSUID]*Proxy // all proxies on this websocket.
+	mu      sync.RWMutex           // mutex to operate proxies map.
 }
 
 // get the connection size
@@ -65,7 +65,7 @@ func (wsc *WebSocketClient) ListenIncomeMsg() {
 		}
 
 		var socketData json.RawMessage
-		socketStream := WebSocketMessage2{
+		socketStream := WebSocketMessage{
 			Data: &socketData,
 		}
 		if err := json.Unmarshal(data, &socketStream); err != nil {
@@ -100,7 +100,7 @@ func (wsc *WebSocketClient) ListenIncomeMsg() {
 
 func (wsc *WebSocketClient) TellClose(id ksuid.KSUID) error {
 	// send finish flag to client
-	finish := WebSocketMessage2{
+	finish := WebSocketMessage{
 		Id:   id.String(),
 		Type: WsTpClose,
 		Data: nil,
