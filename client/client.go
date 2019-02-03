@@ -53,6 +53,11 @@ func (c *client) PreRun() error {
 	} else {
 		c.remoteUrl = u
 	}
+	c.remoteHeader = make(http.Header)
+	// loading and execute plugin
+	if clientPlugin != nil {
+		clientPlugin.BeforeRequest(c.remoteUrl, c.remoteHeader) // in the plugin, we may add http header and modify remote address.
+	}
 	return nil
 }
 
@@ -65,7 +70,7 @@ func (c *client) Run() error {
 	// start websocket connection (to remote server).
 	wsc := ws_socks.WebSocketClient{}
 	wsc.Connect(client.Config.ServerAddr.String(), c.remoteHeader)
-	log.Println("connected")
+	log.Println("connected to ", client.Config.ServerAddr.String())
 	// todo chan for wsc and tcp accept
 	defer wsc.WSClose()
 	// start websocket message listen.
