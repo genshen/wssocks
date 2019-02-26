@@ -55,8 +55,9 @@ func (c *client) PreRun() error {
 	}
 	c.remoteHeader = make(http.Header)
 	// loading and execute plugin
-	if clientPlugin != nil {
-		clientPlugin.BeforeRequest(c.remoteUrl, c.remoteHeader) // in the plugin, we may add http header and modify remote address.
+	if clientPlugin.HasPlugin() {
+		// in the plugin, we may add http header and modify remote address.
+		clientPlugin.RedirectPlugin.BeforeRequest(c.remoteUrl, c.remoteHeader)
 	}
 	return nil
 }
