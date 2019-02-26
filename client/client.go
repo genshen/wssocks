@@ -85,6 +85,7 @@ func (c *client) Run() error {
 
 	// start websocket message listen.
 	go wsc.ListenIncomeMsg()
+	go HeartBeat(&wsc) // send heart beats.
 
 	// new time ticker to flush data into websocket (server).
 	var tick *ticker.Ticker = nil
@@ -119,4 +120,23 @@ func (c *client) Run() error {
 		}()
 	}
 	return nil
+}
+
+func HeartBeat(wsClient *ws_socks.WebSocketClient) {
+	ticker := time.NewTicker(time.Second * 15)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			heartBeats := ws_socks.WebSocketMessage{
+				Id:   ksuid.KSUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.String(),
+				Type: ws_socks.WsTpBeats,
+				Data: nil,
+			}
+			if err := wsClient.WriteWSJSON(heartBeats); err != nil {
+				log.Println(err)
+				return
+			}
+		}
+	}
 }

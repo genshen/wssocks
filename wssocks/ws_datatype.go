@@ -2,6 +2,7 @@ package ws_socks
 
 const (
 	WsTpVer  = "version"
+	WsTpBeats  = "heart_beat"
 	WsTpClose = "finish"
 	WsTpData  = "data"
 	WsTpEst   = "est" // establish

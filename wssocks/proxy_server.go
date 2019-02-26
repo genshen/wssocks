@@ -92,6 +92,7 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	}
 
 	switch socketStream.Type {
+	case WsTpBeats: // heart beats
 	case WsTpClose: // closed by client
 		s.Close(id)
 	case WsTpEst: // establish
