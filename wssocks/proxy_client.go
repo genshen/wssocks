@@ -2,7 +2,7 @@ package ws_socks
 
 import (
 	"encoding/base64"
-	"github.com/genshen/ws-socks/ws-socks/ticker"
+	"github.com/genshen/ws-socks/wssocks/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	"io"
