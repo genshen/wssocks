@@ -86,11 +86,11 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	// parsing id
 	var id ksuid.KSUID
 	if _id, err := ksuid.Parse(socketStream.Id); err != nil {
-		log.Println(err)
-		return nil
+		return err
 	} else {
 		id = _id
 	}
+
 	switch socketStream.Type {
 	case WsTpClose: // closed by client
 		s.Close(id)

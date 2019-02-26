@@ -6,6 +6,7 @@ import (
 	"github.com/genshen/cmds"
 	"github.com/genshen/ws-socks/wssocks"
 	"github.com/genshen/ws-socks/wssocks/ticker"
+	"github.com/segmentio/ksuid"
 	"log"
 	"net"
 	"net/http"
@@ -74,6 +75,14 @@ func (c *client) Run() error {
 	log.Println("connected to ", client.Config.ServerAddr.String())
 	// todo chan for wsc and tcp accept
 	defer wsc.WSClose()
+	// negotiate version
+	if version, err := ws_socks.NegVersionClient(wsc.WsConn); err != nil {
+		log.Println("server version {version code:", version.VersionCode,
+			", version number:", version.Version,
+			", update address:", version.UpdateAddr, "}")
+		return err
+	}
+
 	// start websocket message listen.
 	go wsc.ListenIncomeMsg()
 

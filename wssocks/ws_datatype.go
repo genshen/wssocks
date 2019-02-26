@@ -1,6 +1,7 @@
 package ws_socks
 
 const (
+	WsTpVer  = "version"
 	WsTpClose = "finish"
 	WsTpData  = "data"
 	WsTpEst   = "est" // establish

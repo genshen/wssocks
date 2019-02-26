@@ -28,6 +28,11 @@ func ServeWs(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
+	// negotiate version with client.
+	if err := NegVersionServer(ws); err != nil {
+		return
+	}
+
 	sws := ServerWS{ConcurrentWebSocket: ConcurrentWebSocket{WsConn: ws}}
 	sws.conns = make(map[ksuid.KSUID]*Connector)
 
