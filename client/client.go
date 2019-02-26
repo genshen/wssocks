@@ -6,7 +6,6 @@ import (
 	"github.com/genshen/cmds"
 	"github.com/genshen/ws-socks/wssocks"
 	"github.com/genshen/ws-socks/wssocks/ticker"
-	"github.com/segmentio/ksuid"
 	"log"
 	"net"
 	"net/http"
@@ -64,17 +63,16 @@ func (c *client) PreRun() error {
 }
 
 func (c *client) Run() error {
-	client := ws_socks.Client{
-		Config: ws_socks.ClientConfig{
-			LocalAddr: c.address, ServerAddr: c.remoteUrl,
-		}}
-
 	// start websocket connection (to remote server).
-	wsc := ws_socks.WebSocketClient{}
-	wsc.Connect(client.Config.ServerAddr.String(), c.remoteHeader)
-	log.Println("connected to ", client.Config.ServerAddr.String())
+	log.Println("connecting to ", c.remoteUrl.String())
+	wsc, err := ws_socks.NewWebSocketClient(c.remoteUrl.String(), c.remoteHeader)
+	if err != nil {
+		log.Fatal("establishing connection error:", err)
+	}
+	log.Println("connected to ", c.remoteUrl.String())
 	// todo chan for wsc and tcp accept
 	defer wsc.WSClose()
+
 	// negotiate version
 	if version, err := ws_socks.NegVersionClient(wsc.WsConn); err != nil {
 		log.Println("server version {version code:", version.VersionCode,
@@ -84,8 +82,17 @@ func (c *client) Run() error {
 	}
 
 	// start websocket message listen.
-	go wsc.ListenIncomeMsg()
-	go HeartBeat(&wsc) // send heart beats.
+	go func() {
+		if err := wsc.ListenIncomeMsg(); err != nil {
+			log.Println("error websocket read:", err)
+		}
+	}()
+	// send heart beats.
+	go func() {
+		if err := wsc.HeartBeat(); err != nil {
+			log.Println("heartbeat ending", err)
+		}
+	}()
 
 	// new time ticker to flush data into websocket (server).
 	var tick *ticker.Ticker = nil
@@ -96,10 +103,11 @@ func (c *client) Run() error {
 	}
 
 	// start listen for socks5 connection.
-	s, err := net.Listen("tcp", client.Config.LocalAddr)
+	s, err := net.Listen("tcp", c.address)
 	if err != nil {
 		log.Panic(err)
 	}
+	var client ws_socks.Client
 	for {
 		log.Println("size of connector:", wsc.ConnSize())
 		c, err := s.Accept()
@@ -110,7 +118,7 @@ func (c *client) Run() error {
 		go func() {
 			err := client.Reply(c, func(conn *net.TCPConn, addr string) error {
 				proxy := wsc.NewProxy(conn)
-				proxy.Serve(&wsc, tick, addr)
+				proxy.Serve(wsc, tick, addr)
 				wsc.TellClose(proxy.Id)
 				return nil // todo error
 			})
@@ -120,23 +128,4 @@ func (c *client) Run() error {
 		}()
 	}
 	return nil
-}
-
-func HeartBeat(wsClient *ws_socks.WebSocketClient) {
-	ticker := time.NewTicker(time.Second * 15)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			heartBeats := ws_socks.WebSocketMessage{
-				Id:   ksuid.KSUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.String(),
-				Type: ws_socks.WsTpBeats,
-				Data: nil,
-			}
-			if err := wsClient.WriteWSJSON(heartBeats); err != nil {
-				log.Println(err)
-				return
-			}
-		}
-	}
 }

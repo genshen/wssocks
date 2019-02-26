@@ -6,18 +6,11 @@ import (
 	"errors"
 	"io"
 	"net"
-	"net/url"
 	"strconv"
 )
 
-type ClientConfig struct {
-	LocalAddr  string // "host:port"
-	ServerAddr *url.URL
-}
-
 // client part of socks5 server
 type Client struct {
-	Config ClientConfig
 }
 
 // response to socks5 client and start to exchange data between socks5 client and
