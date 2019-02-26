@@ -5,9 +5,12 @@ import (
 	_ "github.com/genshen/ws-socks/client"
 	_ "github.com/genshen/ws-socks/server"
 	_ "github.com/genshen/ws-socks/version"
+	"log"
 )
 
 func main() {
 	cmds.SetProgramName("wssocks")
-	cmds.Parse()
+	if err := cmds.Parse(); err != nil {
+		log.Fatal(err)
+	}
 }
