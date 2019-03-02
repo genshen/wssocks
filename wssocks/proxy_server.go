@@ -23,16 +23,14 @@ func StartTicker(d time.Duration) *ticker.Ticker {
 }
 
 type Connector struct {
-	Conn      *net.TCPConn
-	Id        ksuid.KSUID
-	closeable bool
+	Conn *net.TCPConn
 }
 
 // proxy server, which handles many tcp connection
 type ServerWS struct {
 	ConcurrentWebSocket
-	mu    sync.RWMutex
-	conns map[ksuid.KSUID]*Connector
+	mu       sync.RWMutex
+	connPool map[ksuid.KSUID]*Connector
 }
 
 // create a new websocket server handler
@@ -46,15 +44,15 @@ func NewServerWS(conn *websocket.Conn) *ServerWS {
 func (s *ServerWS) AddConn(id ksuid.KSUID, conn *net.TCPConn) *Connector {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	connector := Connector{Id: id, Conn: conn, closeable: true}
-	s.conns[id] = &connector
+	connector := Connector{Conn: conn}
+	s.connPool[id] = &connector
 	return &connector
 }
 
 func (s *ServerWS) GetConnectorById(id ksuid.KSUID) *Connector {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if connector, ok := s.conns[id]; ok {
+	if connector, ok := s.connPool[id]; ok {
 		return connector
 	}
 	return nil
@@ -63,20 +61,21 @@ func (s *ServerWS) GetConnectorById(id ksuid.KSUID) *Connector {
 func (s *ServerWS) GetConnectorSize() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.conns)
+	return len(s.connPool)
 }
 
+// close a connection specified by id.
 func (s *ServerWS) Close(id ksuid.KSUID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if connector, ok := s.conns[id]; ok {
-		if connector.closeable { // todo set closeable to false in map
-			if err := connector.Conn.Close(); err != nil {
-				delete(s.conns, id)
+	if connector, ok := s.connPool[id]; ok {
+		err := connector.Conn.Close();
+		delete(s.connPool, id)
 				return err
 			}
+	return nil
 		}
-		delete(s.conns, id)
+
 	}
 	return nil
 }
