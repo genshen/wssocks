@@ -33,6 +33,7 @@ func (p *ProxyClient) DispatchData(data *ProxyData) error {
 }
 
 // close (tcp) connection
+// the close command can be from server
 func (p *ProxyClient) Close() {
 	if p.isClosed {
 		return

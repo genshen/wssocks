@@ -76,11 +76,23 @@ func (s *ServerWS) Close(id ksuid.KSUID) error {
 	return nil
 		}
 
+// close all connections in pool
+func (s *ServerWS) CloseAll(id ksuid.KSUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var err error
+	for id, conn := range s.connPool {
+		if err != nil {
+			_ = conn.Conn.Close()
+		} else {
+			err = conn.Conn.Close() // set error as return
 	}
-	return nil
+		delete(s.connPool, id)
+}
+	return err
 }
 
-// the the client the connection has been closed
+// tell the client the connection has been closed
 func (s *ServerWS) tellClosed(id ksuid.KSUID) {
 	// send finish flag to client
 	finish := WebSocketMessage{

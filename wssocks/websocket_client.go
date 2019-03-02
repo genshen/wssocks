@@ -111,10 +111,12 @@ func (wsc *WebSocketClient) ListenIncomeMsg() error {
 					var proxyData ProxyData
 					if err := json.Unmarshal(socketData, &proxyData); err != nil {
 						wsc.Close(ksid)
+						wsc.TellClose(ksid)
 						continue
 					}
 					if err := proxy.DispatchData(&proxyData); err != nil {
 						wsc.Close(ksid)
+						wsc.TellClose(ksid)
 						continue
 					}
 				}
