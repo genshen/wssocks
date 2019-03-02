@@ -198,7 +198,7 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 		}
 	} else {
 		// no ticker
-		if err := s.WriteMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
+		if err := s.WriteProxyMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 			return err
 		}
 		var buffer = make([]byte, 1024*64)
@@ -207,7 +207,7 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 				log.Println("read error:", err)
 				break
 			} else if n > 0 {
-				if err := s.WriteMessage(id, buffer[:n]); err != nil {
+				if err := s.WriteProxyMessage(id, buffer[:n]); err != nil {
 					log.Println("write websocket error:", err)
 					break
 				}

@@ -80,7 +80,7 @@ func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr stri
 				break
 				// log.Println("read error:", err)
 			} else if n > 0 {
-				if err := wsc.WriteMessage(p.Id, buffer[:n]); err != nil {
+				if err := wsc.WriteProxyMessage(p.Id, buffer[:n]); err != nil {
 					log.Println("write:", err)
 					break
 				}

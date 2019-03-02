@@ -7,6 +7,14 @@ import (
 	"sync"
 )
 
+const (
+	WsTpVer  = "version"
+	WsTpBeats  = "heart_beat"
+	WsTpClose = "finish"
+	WsTpData  = "data"
+	WsTpEst   = "est" // establish
+)
+
 // write data to WebSocket server or client
 type Base64WSBufferWriter struct {
 	buffer bytes.Buffer
@@ -41,3 +49,23 @@ func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cws Concur
 	}
 	return 0, nil
 }
+
+type WebSocketMessage struct {
+	Id   string      `json:"id"`
+	Type string      `json:"type"`
+	Data interface{} `json:"data"` // json.RawMessage
+}
+
+// Proxy data (from server to client or from client to server)
+type ProxyData struct {
+	DataBase64 string `json:"base64"`
+}
+
+// proxy data from client to server
+// type ProxyServerData ProxyData
+
+// Proxy message for establishing connection
+type ProxyEstMessage struct {
+	Addr string `json:"addr"`
+}
+
