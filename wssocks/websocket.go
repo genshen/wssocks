@@ -44,9 +44,9 @@ func ServeWs(w http.ResponseWriter, r *http.Request) {
 			log.Println("Error: error reading webSocket message:", err)
 			break
 		}
-		if err = sws.dispatchMessage(p); err != nil { // todo go
+		if err = sws.dispatchMessage(p); err != nil {
 			log.Println("Error: error proxy:", err)
-			break
+			// break skip error
 		}
 	}
 }

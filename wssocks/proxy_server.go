@@ -71,10 +71,10 @@ func (s *ServerWS) Close(id ksuid.KSUID) error {
 	if connector, ok := s.connPool[id]; ok {
 		err := connector.Conn.Close();
 		delete(s.connPool, id)
-				return err
-			}
+		return err
+	}
 	return nil
-		}
+}
 
 // close all connections in pool
 func (s *ServerWS) CloseAll(id ksuid.KSUID) error {
@@ -86,9 +86,9 @@ func (s *ServerWS) CloseAll(id ksuid.KSUID) error {
 			_ = conn.Conn.Close()
 		} else {
 			err = conn.Conn.Close() // set error as return
-	}
+		}
 		delete(s.connPool, id)
-}
+	}
 	return err
 }
 
@@ -105,14 +105,13 @@ func (s *ServerWS) tellClosed(id ksuid.KSUID) {
 	}
 }
 
-// in this case, one ws only handle one proxy.
 func (s *ServerWS) dispatchMessage(data []byte) error {
 	var socketData json.RawMessage
 	socketStream := WebSocketMessage{
 		Data: &socketData,
 	}
 	if err := json.Unmarshal(data, &socketStream); err != nil {
-		return nil // skip error
+		return err
 	}
 
 	// parsing id
@@ -130,36 +129,36 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	case WsTpEst: // establish
 		var proxyEstMsg ProxyEstMessage
 		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
-			return nil
+			return err
 		} else {
 			go func() {
 				log.Println("info", "proxy to:", proxyEstMsg.Addr)
-				if err:= s.establish(id, proxyEstMsg.Addr); err !=nil{
-					log.Println(err)  // todo error handle better way
+				if err := s.establish(id, proxyEstMsg.Addr); err != nil {
+					log.Println(err) // todo error handle better way
 				}
 				log.Println("info", "disconnected to:", proxyEstMsg.Addr)
-				s.tellClosed(id)                  // tell client to close connection.
+				s.tellClosed(id) // tell client to close connection.
 			}()
 		}
 	case WsTpData:
 		var requestMsg ProxyData
 		if err := json.Unmarshal(socketData, &requestMsg); err != nil {
-			return nil
+			return err
 		}
 
 		if connector := s.GetConnectorById(id); connector != nil {
 			//go func() {
-				// write income data from websocket to TCP connection
-				if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
-					log.Println("base64 decode error,", err)
-					// return err
-				} else {
-					if _, err := connector.Conn.Write(decodeBytes); err != nil {
-						s.tellClosed(id)
-						s.Close(id) // also closed= tcp connection if it exists
-						// todo return err
-					}
+			// write income data from websocket to TCP connection
+			if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
+				log.Println("base64 decode error,", err)
+				return err
+			} else {
+				if _, err := connector.Conn.Write(decodeBytes); err != nil {
+					s.tellClosed(id)
+					return s.Close(id) // also closed= tcp connection if it exists
+					// todo return err
 				}
+			}
 			// }()
 		}
 		return nil
@@ -182,7 +181,6 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 		if _, err := sendBuffer.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 			return err
 		}
-		log.Println("info", "connected to:", addr)
 
 		defer sendBuffer.Flush(websocket.TextMessage, id, &(s.ConcurrentWebSocket))
 		defer proxyServerTicker.Remove(ticker.TickId(id))

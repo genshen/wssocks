@@ -21,23 +21,23 @@ func (b *Base64WSBufferWriter) Write(p []byte) (int, error) {
 }
 
 // flush all data in this buff into WebSocket.
-func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cwi ConcurrentWebSocketInterface) (int, error) {
+func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cws ConcurrentWebSocketInterface) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	length := b.buffer.Len()
 	if length != 0 {
-		b.mu.Lock()
-		defer b.mu.Unlock()
-
 		dataBase64 := base64.StdEncoding.EncodeToString(b.buffer.Bytes())
 		jsonData := WebSocketMessage{
 			Id:   id.String(),
 			Type: WsTpData,
 			Data: ProxyData{DataBase64: dataBase64},
 		}
-		err := cwi.WriteWSJSON(&jsonData)
-		if err != nil {
+		if err := cws.WriteWSJSON(&jsonData); err != nil {
 			return 0, err
 		}
 		b.buffer.Reset()
+		return length, nil
 	}
-	return length, nil
+	return 0, nil
 }
