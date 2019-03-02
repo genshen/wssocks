@@ -35,7 +35,15 @@ type ServerWS struct {
 	conns map[ksuid.KSUID]*Connector
 }
 
-func (s *ServerWS) NewConn(id ksuid.KSUID, conn *net.TCPConn) *Connector {
+// create a new websocket server handler
+func NewServerWS(conn *websocket.Conn) *ServerWS {
+	sws := ServerWS{ConcurrentWebSocket: ConcurrentWebSocket{WsConn: conn}}
+	sws.connPool = make(map[ksuid.KSUID]*Connector)
+	return &sws
+}
+
+// add a tcp connection to connection pool.
+func (s *ServerWS) AddConn(id ksuid.KSUID, conn *net.TCPConn) *Connector {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	connector := Connector{Id: id, Conn: conn, closeable: true}
@@ -154,7 +162,8 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 		return err
 	}
 
-	connector := s.NewConn(id, tcpConn.(*net.TCPConn))
+	// todo check exists
+	connector := s.AddConn(id, tcpConn.(*net.TCPConn))
 	defer s.Close(id)
 
 	if proxyServerTicker != nil {
