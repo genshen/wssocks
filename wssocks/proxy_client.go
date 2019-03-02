@@ -21,7 +21,7 @@ type ProxyClient struct {
 func (p *ProxyClient) DispatchData(data *ProxyData) error {
 	// decode base64
 	if decodeBytes, err := base64.StdEncoding.DecodeString(data.DataBase64); err != nil { // todo ignore error
-		log.Println("bash64 decode error,", err)
+		log.Println("base64 decode error,", err)
 		return err // skip error
 	} else {
 		// just write data back

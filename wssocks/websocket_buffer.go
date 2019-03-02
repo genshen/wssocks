@@ -31,7 +31,7 @@ func (b *Base64WSBufferWriter) Flush(messageType int, id ksuid.KSUID, cwi Concur
 		jsonData := WebSocketMessage{
 			Id:   id.String(),
 			Type: WsTpData,
-			Data: RequestMessage{DataBase64: dataBase64},
+			Data: ProxyData{DataBase64: dataBase64},
 		}
 		err := cwi.WriteWSJSON(&jsonData)
 		if err != nil {

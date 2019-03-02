@@ -131,7 +131,7 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 			}()
 		}
 	case WsTpData:
-		var requestMsg RequestMessage
+		var requestMsg ProxyData
 		if err := json.Unmarshal(socketData, &requestMsg); err != nil {
 			return nil
 		}

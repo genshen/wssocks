@@ -14,15 +14,16 @@ type WebSocketMessage struct {
 	Data interface{} `json:"data"` // json.RawMessage
 }
 
-// Proxy data (from server to client)
+// Proxy data (from server to client or from client to server)
 type ProxyData struct {
 	DataBase64 string `json:"base64"`
 }
+
+// proxy data from client to server
+// type ProxyServerData ProxyData
 
 // Proxy message for establishing connection
 type ProxyEstMessage struct {
 	Addr string `json:"addr"`
 }
 
-// request message (from client to server)
-type RequestMessage ProxyData
