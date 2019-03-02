@@ -112,7 +112,7 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 		}
 
 		if connector := s.GetConnectorById(id); connector != nil {
-			go func() {
+			//go func() {
 				// write income data from websocket to TCP connection
 				if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
 					log.Println("base64 decode error,", err)
@@ -121,10 +121,10 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 					if _, err := connector.Conn.Write(decodeBytes); err != nil {
 						s.tellClosed(id)
 						s.Close(id) // also closed= tcp connection if it exists
-						//return err
+						// todo return err
 					}
 				}
-			}()
+			// }()
 		}
 		return nil
 	}
