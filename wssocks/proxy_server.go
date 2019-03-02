@@ -73,6 +73,19 @@ func (s *ServerWS) Close(id ksuid.KSUID) error {
 	return nil
 }
 
+// the the client the connection has been closed
+func (s *ServerWS) tellClosed(id ksuid.KSUID) {
+	// send finish flag to client
+	finish := WebSocketMessage{
+		Id:   id.String(),
+		Type: WsTpClose,
+		Data: nil,
+	}
+	if err := s.WriteWSJSON(&finish); err != nil {
+		return
+	}
+}
+
 // in this case, one ws only handle one proxy.
 func (s *ServerWS) dispatchMessage(data []byte) error {
 	var socketData json.RawMessage
@@ -94,15 +107,19 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	switch socketStream.Type {
 	case WsTpBeats: // heart beats
 	case WsTpClose: // closed by client
-		s.Close(id)
+		return s.Close(id)
 	case WsTpEst: // establish
-		var proxyMsg ProxyMessage
-		if err := json.Unmarshal(socketData, &proxyMsg); err != nil {
+		var proxyEstMsg ProxyEstMessage
+		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
 			return nil
 		} else {
 			go func() {
-				s.establish(id, proxyMsg.Addr) // todo error handle
-				s.tellClosed(id)
+				log.Println("info", "proxy to:", proxyEstMsg.Addr)
+				if err:= s.establish(id, proxyEstMsg.Addr); err !=nil{
+					log.Println(err)  // todo error handle better way
+				}
+				log.Println("info", "disconnected to:", proxyEstMsg.Addr)
+				s.tellClosed(id)                  // tell client to close connection.
 			}()
 		}
 	case WsTpData:
@@ -131,29 +148,13 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	return nil
 }
 
-// the the client the connection has been closed
-func (s *ServerWS) tellClosed(id ksuid.KSUID) {
-	// send finish flag to client
-	finish := WebSocketMessage{
-		Id:   id.String(),
-		Type: WsTpClose,
-		Data: nil,
-	}
-	if err := s.WriteWSJSON(&finish); err != nil {
-		return
-	}
-}
-
 func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
-	log.Println("info", "proxy to:", addr)
 	tcpConn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
 	if err != nil {
-		log.Println(err)
 		return err
 	}
 
 	connector := s.NewConn(id, tcpConn.(*net.TCPConn))
-	defer log.Println("info", "disconnected to:", addr)
 	defer s.Close(id)
 
 	if proxyServerTicker != nil {

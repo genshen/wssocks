@@ -48,7 +48,7 @@ func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr stri
 	defer log.Println("closing", addr)
 	defer wsc.Close(p.Id)
 
-	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyMessage{Addr: addr}}
+	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyEstMessage{Addr: addr}}
 	if err := wsc.WriteWSJSON(&addrSend); err != nil {
 		log.Println("json error:",err)
 		return err

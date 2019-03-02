@@ -19,8 +19,8 @@ type ProxyData struct {
 	DataBase64 string `json:"base64"`
 }
 
-// Proxy message
-type ProxyMessage struct {
+// Proxy message for establishing connection
+type ProxyEstMessage struct {
 	Addr string `json:"addr"`
 }
 
