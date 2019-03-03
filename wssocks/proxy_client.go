@@ -21,7 +21,7 @@ type ProxyClient struct {
 func (p *ProxyClient) DispatchData(data *ProxyData) error {
 	// decode base64
 	if decodeBytes, err := base64.StdEncoding.DecodeString(data.DataBase64); err != nil { // todo ignore error
-		log.Println("bash64 decode error,", err)
+		log.Println("base64 decode error,", err)
 		return err // skip error
 	} else {
 		// just write data back
@@ -33,6 +33,7 @@ func (p *ProxyClient) DispatchData(data *ProxyData) error {
 }
 
 // close (tcp) connection
+// the close command can be from server
 func (p *ProxyClient) Close() {
 	if p.isClosed {
 		return
@@ -48,7 +49,7 @@ func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr stri
 	defer log.Println("closing", addr)
 	defer wsc.Close(p.Id)
 
-	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyMessage{Addr: addr}}
+	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyEstMessage{Addr: addr}}
 	if err := wsc.WriteWSJSON(&addrSend); err != nil {
 		log.Println("json error:",err)
 		return err
@@ -79,7 +80,7 @@ func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr stri
 				break
 				// log.Println("read error:", err)
 			} else if n > 0 {
-				if err := wsc.WriteMessage(p.Id, buffer[:n]); err != nil {
+				if err := wsc.WriteProxyMessage(p.Id, buffer[:n]); err != nil {
 					log.Println("write:", err)
 					break
 				}

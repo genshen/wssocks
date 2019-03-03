@@ -2,7 +2,6 @@ package ws_socks
 
 import (
 	"github.com/gorilla/websocket"
-	"github.com/segmentio/ksuid"
 	"log"
 	"net/http"
 )
@@ -33,9 +32,7 @@ func ServeWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sws := ServerWS{ConcurrentWebSocket: ConcurrentWebSocket{WsConn: ws}}
-	sws.conns = make(map[ksuid.KSUID]*Connector)
-
+	sws := NewServerWS(ws)
 	// read messages from webSocket
 	for {
 		log.Println("conn size: ", sws.GetConnectorSize())
@@ -47,9 +44,9 @@ func ServeWs(w http.ResponseWriter, r *http.Request) {
 			log.Println("Error: error reading webSocket message:", err)
 			break
 		}
-		if err = sws.dispatchMessage(p); err != nil { // todo go
+		if err = sws.dispatchMessage(p); err != nil {
 			log.Println("Error: error proxy:", err)
-			break
+			// break skip error
 		}
 	}
 }

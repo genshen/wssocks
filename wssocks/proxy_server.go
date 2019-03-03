@@ -3,6 +3,7 @@ package ws_socks
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"github.com/genshen/ws-socks/wssocks/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
@@ -23,30 +24,36 @@ func StartTicker(d time.Duration) *ticker.Ticker {
 }
 
 type Connector struct {
-	Conn      *net.TCPConn
-	Id        ksuid.KSUID
-	closeable bool
+	Conn *net.TCPConn
 }
 
 // proxy server, which handles many tcp connection
 type ServerWS struct {
 	ConcurrentWebSocket
-	mu    sync.RWMutex
-	conns map[ksuid.KSUID]*Connector
+	mu       sync.RWMutex
+	connPool map[ksuid.KSUID]*Connector
 }
 
-func (s *ServerWS) NewConn(id ksuid.KSUID, conn *net.TCPConn) *Connector {
+// create a new websocket server handler
+func NewServerWS(conn *websocket.Conn) *ServerWS {
+	sws := ServerWS{ConcurrentWebSocket: ConcurrentWebSocket{WsConn: conn}}
+	sws.connPool = make(map[ksuid.KSUID]*Connector)
+	return &sws
+}
+
+// add a tcp connection to connection pool.
+func (s *ServerWS) AddConn(id ksuid.KSUID, conn *net.TCPConn) *Connector {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	connector := Connector{Id: id, Conn: conn, closeable: true}
-	s.conns[id] = &connector
+	connector := Connector{Conn: conn}
+	s.connPool[id] = &connector
 	return &connector
 }
 
 func (s *ServerWS) GetConnectorById(id ksuid.KSUID) *Connector {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if connector, ok := s.conns[id]; ok {
+	if connector, ok := s.connPool[id]; ok {
 		return connector
 	}
 	return nil
@@ -55,83 +62,38 @@ func (s *ServerWS) GetConnectorById(id ksuid.KSUID) *Connector {
 func (s *ServerWS) GetConnectorSize() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.conns)
+	return len(s.connPool)
 }
 
+// close a connection specified by id.
 func (s *ServerWS) Close(id ksuid.KSUID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if connector, ok := s.conns[id]; ok {
-		if connector.closeable { // todo set closeable to false in map
-			if err := connector.Conn.Close(); err != nil {
-				delete(s.conns, id)
-				return err
-			}
-		}
-		delete(s.conns, id)
-	}
-	return nil
-}
-
-// in this case, one ws only handle one proxy.
-func (s *ServerWS) dispatchMessage(data []byte) error {
-	var socketData json.RawMessage
-	socketStream := WebSocketMessage{
-		Data: &socketData,
-	}
-	if err := json.Unmarshal(data, &socketStream); err != nil {
-		return nil // skip error
-	}
-
-	// parsing id
-	var id ksuid.KSUID
-	if _id, err := ksuid.Parse(socketStream.Id); err != nil {
+	if connector, ok := s.connPool[id]; ok {
+		err := connector.Conn.Close();
+		delete(s.connPool, id)
 		return err
-	} else {
-		id = _id
-	}
-
-	switch socketStream.Type {
-	case WsTpBeats: // heart beats
-	case WsTpClose: // closed by client
-		s.Close(id)
-	case WsTpEst: // establish
-		var proxyMsg ProxyMessage
-		if err := json.Unmarshal(socketData, &proxyMsg); err != nil {
-			return nil
-		} else {
-			go func() {
-				s.establish(id, proxyMsg.Addr) // todo error handle
-				s.tellClosed(id)
-			}()
-		}
-	case WsTpData:
-		var requestMsg RequestMessage
-		if err := json.Unmarshal(socketData, &requestMsg); err != nil {
-			return nil
-		}
-
-		if connector := s.GetConnectorById(id); connector != nil {
-			go func() {
-				// write income data from websocket to TCP connection
-				if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
-					log.Println("base64 decode error,", err)
-					// return err
-				} else {
-					if _, err := connector.Conn.Write(decodeBytes); err != nil {
-						s.tellClosed(id)
-						s.Close(id) // also closed= tcp connection if it exists
-						//return err
-					}
-				}
-			}()
-		}
-		return nil
 	}
 	return nil
 }
 
-// the the client the connection has been closed
+// close all connections in pool
+func (s *ServerWS) CloseAll(id ksuid.KSUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var err error
+	for id, conn := range s.connPool {
+		if err != nil {
+			_ = conn.Conn.Close()
+		} else {
+			err = conn.Conn.Close() // set error as return
+		}
+		delete(s.connPool, id)
+	}
+	return err
+}
+
+// tell the client the connection has been closed
 func (s *ServerWS) tellClosed(id ksuid.KSUID) {
 	// send finish flag to client
 	finish := WebSocketMessage{
@@ -144,16 +106,72 @@ func (s *ServerWS) tellClosed(id ksuid.KSUID) {
 	}
 }
 
-func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
-	log.Println("info", "proxy to:", addr)
-	tcpConn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
-	if err != nil {
-		log.Println(err)
+func (s *ServerWS) dispatchMessage(data []byte) error {
+	var socketData json.RawMessage
+	socketStream := WebSocketMessage{
+		Data: &socketData,
+	}
+	if err := json.Unmarshal(data, &socketStream); err != nil {
 		return err
 	}
 
-	connector := s.NewConn(id, tcpConn.(*net.TCPConn))
-	defer log.Println("info", "disconnected to:", addr)
+	// parsing id
+	id, err := ksuid.Parse(socketStream.Id);
+	if err != nil {
+		return err
+	}
+
+	switch socketStream.Type {
+	case WsTpBeats: // heart beats
+	case WsTpClose: // closed by client
+		return s.Close(id)
+	case WsTpEst: // establish
+		var proxyEstMsg ProxyEstMessage
+		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
+			return err
+		} else {
+			go func() {
+				log.Println("info", "proxy to:", proxyEstMsg.Addr)
+				if err := s.establish(id, proxyEstMsg.Addr); err != nil {
+					log.Println(err) // todo error handle better way
+				}
+				log.Println("info", "disconnected to:", proxyEstMsg.Addr)
+				s.tellClosed(id) // tell client to close connection.
+			}()
+		}
+	case WsTpData:
+		var requestMsg ProxyData
+		if err := json.Unmarshal(socketData, &requestMsg); err != nil {
+			return err
+		}
+
+		if connector := s.GetConnectorById(id); connector != nil {
+			//go func() {
+			// write income data from websocket to TCP connection
+			if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
+				log.Println("base64 decode error,", err)
+				return err
+			} else {
+				if _, err := connector.Conn.Write(decodeBytes); err != nil {
+					s.tellClosed(id)
+					return s.Close(id) // also closed= tcp connection if it exists
+				}
+			}
+			// }()
+		}
+		return nil
+	}
+	return nil
+}
+
+func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
+	tcpConn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
+	if err != nil {
+		return err
+	}
+
+	// todo check exists
+	connector := s.AddConn(id, tcpConn.(*net.TCPConn))
 	defer s.Close(id)
 
 	if proxyServerTicker != nil {
@@ -161,7 +179,6 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 		if _, err := sendBuffer.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 			return err
 		}
-		log.Println("info", "connected to:", addr)
 
 		defer sendBuffer.Flush(websocket.TextMessage, id, &(s.ConcurrentWebSocket))
 		defer proxyServerTicker.Remove(ticker.TickId(id))
@@ -179,18 +196,16 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 		}
 	} else {
 		// no ticker
-		if err := s.WriteMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
+		if err := s.WriteProxyMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 			return err
 		}
 		var buffer = make([]byte, 1024*64)
 		for {
 			if n, err := connector.Conn.Read(buffer); err != nil {
-				log.Println("read error:", err)
-				break
+				return errors.New("read connection error:" + err.Error())
 			} else if n > 0 {
-				if err := s.WriteMessage(id, buffer[:n]); err != nil {
-					log.Println("write websocket error:", err)
-					break
+				if err := s.WriteProxyMessage(id, buffer[:n]); err != nil {
+					return errors.New("error sending data via webSocket:" + err.Error())
 				}
 			}
 		}

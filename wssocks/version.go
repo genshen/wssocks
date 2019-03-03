@@ -30,6 +30,6 @@ func NegVersionClient(wsConn *websocket.Conn) (VersionNeg, error) {
 
 // send version information to client from server
 func NegVersionServer(wsConn *websocket.Conn) error {
-	versionData := VersionNeg{VersionCode: VersionCode}
+	versionData := VersionNeg{VersionCode: VersionCode} // todo more information
 	return wsConn.WriteJSON(&versionData)
 }
