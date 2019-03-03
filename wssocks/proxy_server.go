@@ -3,6 +3,7 @@ package ws_socks
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"github.com/genshen/ws-socks/wssocks/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
@@ -115,11 +116,9 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	}
 
 	// parsing id
-	var id ksuid.KSUID
-	if _id, err := ksuid.Parse(socketStream.Id); err != nil {
+	id, err := ksuid.Parse(socketStream.Id);
+	if err != nil {
 		return err
-	} else {
-		id = _id
 	}
 
 	switch socketStream.Type {
@@ -156,7 +155,6 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 				if _, err := connector.Conn.Write(decodeBytes); err != nil {
 					s.tellClosed(id)
 					return s.Close(id) // also closed= tcp connection if it exists
-					// todo return err
 				}
 			}
 			// }()
@@ -204,12 +202,10 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 		var buffer = make([]byte, 1024*64)
 		for {
 			if n, err := connector.Conn.Read(buffer); err != nil {
-				log.Println("read error:", err)
-				break
+				return errors.New("read connection error:" + err.Error())
 			} else if n > 0 {
 				if err := s.WriteProxyMessage(id, buffer[:n]); err != nil {
-					log.Println("write websocket error:", err)
-					break
+					return errors.New("error sending data via webSocket:" + err.Error())
 				}
 			}
 		}

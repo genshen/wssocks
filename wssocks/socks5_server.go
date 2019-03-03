@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"strconv"
 )
@@ -22,24 +23,35 @@ func (client *Client) Reply(conn net.Conn, onDial func(conn *net.TCPConn, addr s
 	if err != nil {
 		return err
 	}
-	var addr string
 	//sock5 proxy
-	if buffer[0] != 0x05 {
+	if n >= 2 && buffer[0] != 0x05 {
 		return errors.New("only socks5 supported")
 	}
 
 	// response to socks5 client
 	// see rfc 1982 for more details (https://tools.ietf.org/html/rfc1928)
-	n, err = conn.Write([]byte{0x05, 0x00})
+	n, err = conn.Write([]byte{0x05, 0x00}) // version and no authentication required
 	if err != nil {
 		return err
 	}
 
+	// step2: process client Requests and does Reply
+	/**
+	+----+-----+-------+------+----------+----------+
+	|VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
+	+----+-----+-------+------+----------+----------+
+	| 1  |  1  | X'00' |  1   | Variable |    2     |
+	+----+-----+-------+------+----------+----------+
+	 */
 	n, err = conn.Read(buffer[:])
 	if err != nil {
 		return err
 	}
+	if n < 6 {
+		return errors.New("not a socks protocol")
+	}
 
+	var addr string
 	var host string
 	switch buffer[3] {
 	case 0x01:
