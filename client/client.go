@@ -4,8 +4,8 @@ import (
 	"errors"
 	"flag"
 	"github.com/genshen/cmds"
-	"github.com/genshen/ws-socks/wssocks"
-	"github.com/genshen/ws-socks/wssocks/ticker"
+	"github.com/genshen/wssocks/wss"
+	"github.com/genshen/wssocks/wss/ticker"
 	"log"
 	"net"
 	"net/http"
@@ -65,7 +65,7 @@ func (c *client) PreRun() error {
 func (c *client) Run() error {
 	// start websocket connection (to remote server).
 	log.Println("connecting to ", c.remoteUrl.String())
-	wsc, err := ws_socks.NewWebSocketClient(c.remoteUrl.String(), c.remoteHeader)
+	wsc, err := wss.NewWebSocketClient(c.remoteUrl.String(), c.remoteHeader)
 	if err != nil {
 		log.Fatal("establishing connection error:", err)
 	}
@@ -74,7 +74,7 @@ func (c *client) Run() error {
 	defer wsc.WSClose()
 
 	// negotiate version
-	if version, err := ws_socks.NegVersionClient(wsc.WsConn); err != nil {
+	if version, err := wss.NegVersionClient(wsc.WsConn); err != nil {
 		log.Println("server version {version code:", version.VersionCode,
 			", version number:", version.Version,
 			", update address:", version.UpdateAddr, "}")
@@ -107,7 +107,7 @@ func (c *client) Run() error {
 	if err != nil {
 		log.Panic(err)
 	}
-	var client ws_socks.Client
+	var client wss.Client
 	for {
 		log.Println("size of connector:", wsc.ConnSize())
 		c, err := s.Accept()

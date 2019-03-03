@@ -1,11 +1,10 @@
-package ws_socks
+package wss
 
 import (
 	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"strconv"
 )

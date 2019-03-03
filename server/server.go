@@ -3,7 +3,7 @@ package server
 import (
 	"flag"
 	"github.com/genshen/cmds"
-	"github.com/genshen/ws-socks/wssocks"
+	"github.com/genshen/wssocks/wss"
 	"log"
 	"net/http"
 	"time"
@@ -40,12 +40,12 @@ func (s *server) PreRun() error {
 
 func (s *server) Run() error {
 	if s.ticker != 0 {
-		ticker := ws_socks.StartTicker(time.Microsecond * time.Duration(100))
+		ticker := wss.StartTicker(time.Microsecond * time.Duration(100))
 		defer ticker.Stop()
 	}
 
 	// new time ticker to flush data into websocket (to client).
-	http.HandleFunc("/", ws_socks.ServeWs)
+	http.HandleFunc("/", wss.ServeWs)
 	log.Println("listening on ", s.address)
 	log.Fatal(http.ListenAndServe(s.address, nil))
 	return nil

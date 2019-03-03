@@ -2,9 +2,9 @@ package main
 
 import (
 	"github.com/genshen/cmds"
-	_ "github.com/genshen/ws-socks/client"
-	_ "github.com/genshen/ws-socks/server"
-	_ "github.com/genshen/ws-socks/version"
+	_ "github.com/genshen/wssocks/client"
+	_ "github.com/genshen/wssocks/server"
+	_ "github.com/genshen/wssocks/version"
 	"log"
 )
 

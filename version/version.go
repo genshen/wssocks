@@ -3,9 +3,8 @@ package version
 import (
 	"flag"
 	"fmt"
-	"github.com/genshen/ws-socks/wssocks"
-
 	"github.com/genshen/cmds"
+	"github.com/genshen/wssocks/wss"
 )
 
 const VERSION = "0.1.0"
@@ -34,8 +33,8 @@ func (v *version) PreRun() error {
 
 func (v *version) Run() error {
 	fmt.Printf("version\t %s.\n", VERSION)
-	fmt.Printf("protocol version\t %d\n", ws_socks.VersionCode)
+	fmt.Printf("protocol version\t %d\n", wss.VersionCode)
 	fmt.Println("Author\t genshen<genshenchu@gmail.com>")
-	fmt.Println("github \t https://github.com/genshen/ws-socks")
+	fmt.Println("github \t https://github.com/genshen/wssocks")
 	return nil
 }

@@ -1,4 +1,4 @@
-module github.com/genshen/ws-socks
+module github.com/genshen/wssocks
 
 require (
 	github.com/genshen/cmds v0.0.0-20181110071553-72099a07a84d

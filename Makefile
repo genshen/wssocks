@@ -1,3 +1,5 @@
+package_name=github.com/genshen/wssocks
+
 all: wssocks-linux-amd64 wssocks-darwin-amd64 wssocks-windows-amd64.exe
 
 wssocks-linux-amd64:

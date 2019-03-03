@@ -1,4 +1,4 @@
-package ws_socks
+package wss
 
 import (
 	"bytes"
