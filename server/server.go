@@ -3,7 +3,7 @@ package server
 import (
 	"flag"
 	"github.com/genshen/cmds"
-	"github.com/genshen/wssocks/wss"
+	"github.com/DefinitlyEvil/wssocks/wss"
 	"log"
 	"net/http"
 	"time"

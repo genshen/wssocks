@@ -2,9 +2,9 @@ package main
 
 import (
 	"github.com/genshen/cmds"
-	_ "github.com/genshen/wssocks/client"
-	_ "github.com/genshen/wssocks/server"
-	_ "github.com/genshen/wssocks/version"
+	_ "github.com/DefinitlyEvil/wssocks/client"
+	_ "github.com/DefinitlyEvil/wssocks/server"
+	_ "github.com/DefinitlyEvil/wssocks/version"
 	"log"
 )
 

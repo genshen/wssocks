@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/genshen/wssocks/wss/ticker"
+	"github.com/DefinitlyEvil/wssocks/wss/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	"io"
