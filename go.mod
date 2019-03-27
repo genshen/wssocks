@@ -1,4 +1,4 @@
-module github.com/genshen/wssocks
+module github.com/DefinitlyEvil/wssocks
 
 require (
 	github.com/genshen/cmds v0.0.0-20181110071553-72099a07a84d
