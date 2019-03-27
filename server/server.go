@@ -24,6 +24,7 @@ func init() {
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
 	serverCommand.FlagSet.IntVar(&s.ticker, "ticker", 0, `ticker(ms) to send data to client.`)
 	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
+	serverCommand.FlagSet.StringVar(&s.key, "key", "", `connection key. `)
 
 	serverCommand.Runner = &s
 	cmds.AllCommands = append(cmds.AllCommands, serverCommand)
@@ -32,10 +33,20 @@ func init() {
 type server struct {
 	address string
 	ticker  int
+	key string
 }
 
 func (s *server) PreRun() error {
 	return nil
+}
+
+func (s *server) checkHeader(w http.ResponseWriter, r *http.Request) {
+	if s.key != "" && r.Header.Get("Key") != s.key {
+		w.WriteHeader(401)
+		w.Write([]byte("Access denied! "))
+		return
+	}
+	wss.ServeWs(w, r)
 }
 
 func (s *server) Run() error {
@@ -45,7 +56,7 @@ func (s *server) Run() error {
 	}
 
 	// new time ticker to flush data into websocket (to client).
-	http.HandleFunc("/", wss.ServeWs)
+	http.HandleFunc("/", s.checkHeader)
 	log.Println("listening on ", s.address)
 	log.Fatal(http.ListenAndServe(s.address, nil))
 	return nil

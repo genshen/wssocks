@@ -27,6 +27,7 @@ func init() {
 	clientCommand.FlagSet = fs
 	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5.`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
+	clientCommand.FlagSet.StringVar(&client.key, "key", "", `connection key.`)
 	clientCommand.FlagSet.IntVar(&client.ticker, "ticker", 0, `ticker(ms) to send data to client.`)
 
 	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.
@@ -41,6 +42,7 @@ type client struct {
 	ticker       int
 	remoteUrl    *url.URL
 	remoteHeader http.Header // header in websocket request(default is nil)
+	key string
 }
 
 func (c *client) PreRun() error {
@@ -54,6 +56,9 @@ func (c *client) PreRun() error {
 		c.remoteUrl = u
 	}
 	c.remoteHeader = make(http.Header)
+	if c.key != "" {
+		c.remoteHeader.Set("Key", c.key)
+	}
 	// loading and execute plugin
 	if clientPlugin.HasPlugin() {
 		// in the plugin, we may add http header and modify remote address.
