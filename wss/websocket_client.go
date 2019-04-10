@@ -25,9 +25,9 @@ func (wsc *WebSocketClient) ConnSize() int {
 
 // Establish websocket connection.
 // And initialize proxies container.
-func NewWebSocketClient(addr string, header http.Header) (*WebSocketClient, error) {
+func NewWebSocketClient(dialer *websocket.Dialer, addr string, header http.Header) (*WebSocketClient, error) {
 	var wsc WebSocketClient
-	ws, _, err := websocket.DefaultDialer.Dial(addr, header)
+	ws, _, err := dialer.Dial(addr, header)
 	if err != nil {
 		return nil, err
 	}
