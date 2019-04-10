@@ -7,14 +7,15 @@ import (
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/ticker"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"time"
 )
 
+const CommandNameClient = "client"
+
 var clientCommand = &cmds.Command{
-	Name:        "client",
+	Name:        CommandNameClient,
 	Summary:     "run as client mode",
 	Description: "run as client program.",
 	CustomFlags: false,
@@ -23,7 +24,7 @@ var clientCommand = &cmds.Command{
 
 func init() {
 	var client client
-	fs := flag.NewFlagSet("client", flag.ExitOnError)
+	fs := flag.NewFlagSet(CommandNameClient, flag.ExitOnError)
 	clientCommand.FlagSet = fs
 	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5.`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
@@ -98,34 +99,13 @@ func (c *client) Run() error {
 	var tick *ticker.Ticker = nil
 	if c.ticker != 0 {
 		tick = ticker.NewTicker()
-		tick.Start(time.Microsecond * time.Duration(100))
+		tick.Start(time.Microsecond * time.Duration(c.ticker))
 		defer tick.Stop()
 	}
 
 	// start listen for socks5 connection.
-	s, err := net.Listen("tcp", c.address)
-	if err != nil {
-		log.Panic(err)
-	}
-	var client wss.Client
-	for {
-		log.Println("size of connector:", wsc.ConnSize())
-		c, err := s.Accept()
-		if err != nil {
-			log.Panic(err)
-			break
-		}
-		go func() {
-			err := client.Reply(c, func(conn *net.TCPConn, addr string) error {
-				proxy := wsc.NewProxy(conn)
-				proxy.Serve(wsc, tick, addr)
-				wsc.TellClose(proxy.Id)
-				return nil // todo error
-			})
-			if err != nil {
-				log.Println(err)
-			}
-		}()
+	if err := wss.ListenAndServe(wsc, tick, c.address); err != nil {
+		return err
 	}
 	return nil
 }
