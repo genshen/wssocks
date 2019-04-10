@@ -83,7 +83,7 @@ func (c *client) Run() error {
 	defer wsc.WSClose()
 
 	// negotiate version
-	if version, err := wss.NegVersionClient(wsc.WsConn); err != nil {
+	if version, err := wss.ExchangeVersion(wsc.WsConn); err != nil {
 		log.Println("server version {version code:", version.VersionCode,
 			", version number:", version.Version,
 			", update address:", version.UpdateAddr, "}")
