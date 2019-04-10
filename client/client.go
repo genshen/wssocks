@@ -6,6 +6,7 @@ import (
 	"github.com/genshen/cmds"
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/ticker"
+	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"net/url"
@@ -37,11 +38,11 @@ func init() {
 }
 
 type client struct {
-	address      string
-	remote       string
-	ticker       int
-	remoteUrl    *url.URL
-	remoteHeader http.Header // header in websocket request(default is nil)
+	address   string
+	remote    string
+	ticker    int
+	remoteUrl *url.URL
+	//	remoteHeader http.Header
 }
 
 func (c *client) PreRun() error {
@@ -54,19 +55,26 @@ func (c *client) PreRun() error {
 	} else {
 		c.remoteUrl = u
 	}
-	c.remoteHeader = make(http.Header)
-	// loading and execute plugin
-	if clientPlugin.HasPlugin() {
-		// in the plugin, we may add http header and modify remote address.
-		clientPlugin.RedirectPlugin.BeforeRequest(c.remoteUrl, c.remoteHeader)
-	}
+
 	return nil
 }
 
 func (c *client) Run() error {
 	// start websocket connection (to remote server).
 	log.Println("connecting to ", c.remoteUrl.String())
-	wsc, err := wss.NewWebSocketClient(c.remoteUrl.String(), c.remoteHeader)
+
+	dialer := websocket.DefaultDialer
+	wsHeader := make(http.Header) // header in websocket request(default is nil)
+
+	// loading and execute plugin
+	if clientPlugin.HasPlugin() {
+		// in the plugin, we may add http header/dialer and modify remote address.
+		if err := clientPlugin.RedirectPlugin.BeforeRequest(dialer, c.remoteUrl, wsHeader); err != nil {
+			return err
+		}
+	}
+
+	wsc, err := wss.NewWebSocketClient(websocket.DefaultDialer, c.remoteUrl.String(), wsHeader)
 	if err != nil {
 		log.Fatal("establishing connection error:", err)
 	}
