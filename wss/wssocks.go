@@ -2,7 +2,7 @@ package wss
 
 import (
 	"github.com/genshen/wssocks/wss/ticker"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net"
 )
 
@@ -12,13 +12,15 @@ func ListenAndServe(wsc *WebSocketClient, tick *ticker.Ticker, address string) e
 	if err != nil {
 		return err
 	}
+	log.WithField("local address", address).Info("listening on local address for incoming proxy request.")
 	var client Client
 	for {
-		log.Println("size of connector:", wsc.ConnSize())
 		c, err := s.Accept()
 		if err != nil {
 			return nil
 		}
+		log.WithField("size", wsc.ConnSize()).Trace("size of proxy connection changed.")
+
 		go func() {
 			err := client.Reply(c, func(conn *net.TCPConn, addr string) error {
 				proxy := wsc.NewProxy(conn)

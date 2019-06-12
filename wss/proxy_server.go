@@ -7,8 +7,8 @@ import (
 	"github.com/genshen/wssocks/wss/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
+	log "github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -131,11 +131,11 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 			return err
 		} else {
 			go func() {
-				log.Println("info", "proxy to:", proxyEstMsg.Addr)
+				log.WithField("address", proxyEstMsg.Addr).Info("proxy  connecting to remote")
 				if err := s.establish(id, proxyEstMsg.Addr); err != nil {
-					log.Println(err) // todo error handle better way
+					log.Error(err) // todo error handle better way
 				}
-				log.Println("info", "disconnected to:", proxyEstMsg.Addr)
+				log.WithField("address", proxyEstMsg.Addr).Info("disconnected to remote")
 				s.tellClosed(id) // tell client to close connection.
 			}()
 		}
@@ -149,7 +149,7 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 			//go func() {
 			// write income data from websocket to TCP connection
 			if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
-				log.Println("base64 decode error,", err)
+				log.Error("base64 decode error,", err)
 				return err
 			} else {
 				if _, err := connector.Conn.Write(decodeBytes); err != nil {
@@ -186,7 +186,7 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 		proxyServerTicker.Append(ticker.TickId(id), func() {
 			// fixme return error
 			if _, err := sendBuffer.Flush(websocket.TextMessage, id, &(s.ConcurrentWebSocket)); err != nil {
-				log.Println("Error: error sending data via webSocket:", err)
+				log.Error("error sending data via webSocket:", err)
 				return
 			}
 		})

@@ -4,7 +4,7 @@ import (
 	"flag"
 	"github.com/genshen/cmds"
 	"github.com/genshen/wssocks/wss"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"time"
 )
@@ -46,7 +46,9 @@ func (s *server) Run() error {
 
 	// new time ticker to flush data into websocket (to client).
 	http.HandleFunc("/", wss.ServeWs)
-	log.Println("listening on ", s.address)
+	log.WithFields(log.Fields{
+		"listen address": s.address,
+	}).Info("listening on income message.")
 	log.Fatal(http.ListenAndServe(s.address, nil))
 	return nil
 }
