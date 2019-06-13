@@ -9,6 +9,12 @@ import (
 	"sync"
 )
 
+// FdWriter is a writer with a file descriptor.
+type FdWriter interface {
+	io.Writer
+	Fd() uintptr
+}
+
 // Writer will updates the terminal when flush is called.
 type Writer struct {
 	OutDev    io.Writer

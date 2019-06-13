@@ -9,7 +9,10 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
+	"github.com/mattn/go-isatty"
 )
+
+const ESC = 27
 
 var kernel32 = syscall.NewLazyDLL("kernel32.dll")
 
@@ -47,12 +50,12 @@ type consoleScreenBufferInfo struct {
 }
 
 func (w *Writer) clearLines() {
-	f, ok := w.Out.(FdWriter)
+	f, ok := w.OutDev.(FdWriter)
 	if ok && !isatty.IsTerminal(f.Fd()) {
 		ok = false
 	}
 	if !ok {
-		_, _ = fmt.Fprint(w.Out, strings.Repeat(clear, w.lineCount))
+		_, _ = fmt.Fprint(w.OutDev, strings.Repeat(clear, w.lineCount))
 		return
 	}
 	fd := f.Fd()
