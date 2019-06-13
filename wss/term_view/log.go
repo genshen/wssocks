@@ -55,8 +55,13 @@ func (p *ProgressLog) Update(status Status) {
 			log.Fatal("bad connection size")
 		}
 	}
-
 	// update log
+	p.setLogBuffer()    // call Writer.Write() to set log data into buffer
+	p.Writer.Flush(nil) // flush buffer
+}
+
+// update progress log.
+func (p *ProgressLog) setLogBuffer() {
 	_, terminalRows := getTermSize()
 	// log size is ok for terminal (at least one row)
 	p.log.WithField("size", p.ConnSize).Trace("size of proxy connection(s).")
@@ -79,6 +84,19 @@ func (p *ProgressLog) Update(status Status) {
 			}
 		}
 	}
+}
 
-	p.Writer.Flush()
+// write buffer data directly to stdout.
+func (p *ProgressLog) Write(buf [] byte) (int, error) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+
+	p.setLogBuffer() // call Writer.Write() to set log data into buffer
+	err := p.Writer.Flush(func() error { // flush buffer
+		if _, err := p.Writer.OutDev.Write(buf); err != nil { // just write buff to stdout, and keep progress log.
+			return err
+		}
+		return nil
+	})
+	return len(buf), err
 }

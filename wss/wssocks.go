@@ -14,8 +14,11 @@ func ListenAndServe(wsc *WebSocketClient, tick *ticker.Ticker, address string) e
 		return err
 	}
 	log.WithField("local address", address).Info("listening on local address for incoming proxy request.")
-	var client Client
+
 	plog := term_view.NewPLog()
+	log.SetOutput(plog) // change log stdout to plog
+
+	var client Client
 	for {
 		c, err := s.Accept()
 		if err != nil {

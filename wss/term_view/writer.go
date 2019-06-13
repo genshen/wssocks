@@ -41,7 +41,7 @@ func (w *Writer) Write(buf []byte) (n int, err error) {
 }
 
 // Flush writes to the out and resets the buffer.
-func (w *Writer) Flush() error {
+func (w *Writer) Flush(onLinesCleared func() error) error {
 	w.mtx.Lock()
 	defer w.mtx.Unlock()
 
@@ -49,6 +49,11 @@ func (w *Writer) Flush() error {
 		return nil
 	}
 	w.clearLines()
+	if onLinesCleared != nil {
+		if err := onLinesCleared(); err != nil { // callback if lines is cleared.
+			return err
+		}
+	}
 
 	lines := 0
 	var currentLine bytes.Buffer
