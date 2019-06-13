@@ -2,6 +2,7 @@ package wss
 
 import (
 	"encoding/base64"
+	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/genshen/wssocks/wss/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
@@ -44,9 +45,9 @@ func (p *ProxyClient) Close() {
 
 // handel socket dial results processing
 // copy income connection data to proxy serve via websocket
-func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
-	log.WithField("address", addr).Info("dialing to remote.")
-	defer log.WithField("address", addr).Info("remote proxy closed.")
+func (p *ProxyClient) Serve(plog *term_view.ProgressLog, wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
+	plog.Update(term_view.Status{IsNew: true, Address: addr})
+	defer plog.Update(term_view.Status{IsNew: false, Address: addr})
 	defer wsc.Close(p.Id)
 
 	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyEstMessage{Addr: addr}}
@@ -54,7 +55,6 @@ func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr stri
 		log.Error("json error:", err)
 		return err
 	}
-	log.WithField("address", addr).Info("connected to remote.")
 
 	if tick != nil {
 		var buffer Base64WSBufferWriter
