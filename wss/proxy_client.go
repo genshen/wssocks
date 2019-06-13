@@ -2,11 +2,12 @@ package wss
 
 import (
 	"encoding/base64"
+	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/genshen/wssocks/wss/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
+	log "github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"net"
 )
 
@@ -21,7 +22,7 @@ type ProxyClient struct {
 func (p *ProxyClient) DispatchData(data *ProxyData) error {
 	// decode base64
 	if decodeBytes, err := base64.StdEncoding.DecodeString(data.DataBase64); err != nil { // todo ignore error
-		log.Println("base64 decode error,", err)
+		log.Error("base64 decode error,", err)
 		return err // skip error
 	} else {
 		// just write data back
@@ -44,17 +45,16 @@ func (p *ProxyClient) Close() {
 
 // handel socket dial results processing
 // copy income connection data to proxy serve via websocket
-func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
-	log.Println("dialing to", addr)
-	defer log.Println("closing", addr)
+func (p *ProxyClient) Serve(plog *term_view.ProgressLog, wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
+	plog.Update(term_view.Status{IsNew: true, Address: addr})
+	defer plog.Update(term_view.Status{IsNew: false, Address: addr})
 	defer wsc.Close(p.Id)
 
 	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyEstMessage{Addr: addr}}
 	if err := wsc.WriteWSJSON(&addrSend); err != nil {
-		log.Println("json error:",err)
+		log.Error("json error:", err)
 		return err
 	}
-	log.Println("connected to", addr)
 
 	if tick != nil {
 		var buffer Base64WSBufferWriter
@@ -64,12 +64,12 @@ func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr stri
 		tick.Append(ticker.TickId(p.Id), func() { // fixme return error
 			_, err := buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
 			if err != nil {
-				log.Println("write:", err) // todo use of closed network connection
+				log.Error("write error:", err) // todo use of closed network connection
 			}
 		}) // todo p.id
 
 		if _, err := io.Copy(&buffer, p.Conn); err != nil { // copy data to buffer
-			log.Println("io copy error,", err)
+			log.Error("io copy error,", err)
 			return nil
 		}
 	} else {
@@ -81,7 +81,7 @@ func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr stri
 				// log.Println("read error:", err)
 			} else if n > 0 {
 				if err := wsc.WriteProxyMessage(p.Id, buffer[:n]); err != nil {
-					log.Println("write:", err)
+					log.Error("write error:", err)
 					break
 				}
 			}

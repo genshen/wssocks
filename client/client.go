@@ -7,7 +7,7 @@ import (
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/ticker"
 	"github.com/gorilla/websocket"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
 	"time"
@@ -61,7 +61,9 @@ func (c *client) PreRun() error {
 
 func (c *client) Run() error {
 	// start websocket connection (to remote server).
-	log.Println("connecting to ", c.remoteUrl.String())
+	log.WithFields(log.Fields{
+		"remote": c.remoteUrl.String(),
+	}).Info("connecting to wssocks server.")
 
 	dialer := websocket.DefaultDialer
 	wsHeader := make(http.Header) // header in websocket request(default is nil)
@@ -78,28 +80,32 @@ func (c *client) Run() error {
 	if err != nil {
 		log.Fatal("establishing connection error:", err)
 	}
-	log.Println("connected to ", c.remoteUrl.String())
+	log.WithFields(log.Fields{
+		"remote": c.remoteUrl.String(),
+	}).Info("connected to wssocks server.")
 	// todo chan for wsc and tcp accept
 	defer wsc.WSClose()
 
 	// negotiate version
 	if version, err := wss.ExchangeVersion(wsc.WsConn); err != nil {
-		log.Println("server version {version code:", version.VersionCode,
-			", version number:", version.Version,
-			", update address:", version.UpdateAddr, "}")
+		log.WithFields(log.Fields{
+			"version code":    version.VersionCode,
+			"version number:": version.Version,
+			"update address":  version.UpdateAddr,
+		}).Info("server version")
 		return err
 	}
 
 	// start websocket message listen.
 	go func() {
 		if err := wsc.ListenIncomeMsg(); err != nil {
-			log.Println("error websocket read:", err)
+			log.Error("error websocket read:", err)
 		}
 	}()
 	// send heart beats.
 	go func() {
 		if err := wsc.HeartBeat(); err != nil {
-			log.Println("heartbeat ending", err)
+			log.Info("heartbeat ending", err)
 		}
 	}()
 
