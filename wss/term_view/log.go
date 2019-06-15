@@ -3,7 +3,8 @@ package term_view
 import (
 	"fmt"
 	"github.com/sirupsen/logrus"
-	"log"
+	"golang.org/x/crypto/ssh/terminal"
+	"os"
 	"sync"
 )
 
@@ -52,7 +53,7 @@ func (p *ProgressLog) Update(status Status) {
 				p.Address[status.Address] = size - 1
 			}
 		} else {
-			log.Fatal("bad connection size")
+			logrus.Fatal("bad connection size")
 		}
 	}
 	// update log
@@ -62,7 +63,11 @@ func (p *ProgressLog) Update(status Status) {
 
 // update progress log.
 func (p *ProgressLog) setLogBuffer() {
-	_, terminalRows := getTermSize()
+	_, terminalRows, err := terminal.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
 	// log size is ok for terminal (at least one row)
 	p.log.WithField("size", p.ConnSize).Trace("size of proxy connection(s).")
 	terminalRows--

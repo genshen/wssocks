@@ -22,7 +22,7 @@ func ListenAndServe(wsc *WebSocketClient, tick *ticker.Ticker, address string) e
 	for {
 		c, err := s.Accept()
 		if err != nil {
-			return nil
+			return err
 		}
 
 		go func() {
@@ -33,7 +33,7 @@ func ListenAndServe(wsc *WebSocketClient, tick *ticker.Ticker, address string) e
 				return nil // todo error
 			})
 			if err != nil {
-				log.Println(err)
+				log.Error(err)
 			}
 		}()
 	}

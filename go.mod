@@ -8,4 +8,5 @@ require (
 	github.com/mattn/go-isatty v0.0.8
 	github.com/segmentio/ksuid v1.0.2
 	github.com/sirupsen/logrus v1.4.2
+	golang.org/x/crypto v0.0.0-20190611184440-5c40567a22f8
 )
