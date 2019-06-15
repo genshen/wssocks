@@ -6,6 +6,7 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 	"os"
 	"sync"
+	"text/tabwriter"
 )
 
 type Status struct {
@@ -15,8 +16,7 @@ type Status struct {
 type ProgressLog struct {
 	ConnSize uint            // size of current connections
 	Address  map[string]uint // current requests as well as its count
-	log      *logrus.Logger
-	Writer   *Writer // terminal writer  todo defer Flush
+	Writer   *Writer         // terminal writer  todo defer Flush
 	mtx      *sync.Mutex
 }
 
@@ -27,10 +27,6 @@ func NewPLog() *ProgressLog {
 		mtx:      &sync.Mutex{},
 	}
 	plog.Writer = NewWriter()
-	plog.log = logrus.New()
-	plog.log.SetOutput(plog.Writer)                                 // use terminal writer
-	plog.log.SetFormatter(&logrus.TextFormatter{ForceColors: true}) // use colorful log
-	plog.log.SetLevel(logrus.TraceLevel)
 	return &plog
 }
 
@@ -69,24 +65,33 @@ func (p *ProgressLog) setLogBuffer() {
 		return
 	}
 	// log size is ok for terminal (at least one row)
-	p.log.WithField("size", p.ConnSize).Trace("size of proxy connection(s).")
+	w := new(tabwriter.Writer)
+
+	w.Init(p.Writer, 0, 0, 5, ' ', 0)
+	defer w.Flush()
+
+	_, _ = fmt.Fprintf(w, "TARGETs\tCONNECTIONs\t\n")
 	terminalRows--
-	recordsWritten := 0
+
+	var recordsHiden = len(p.Address)
 	if terminalRows >= 2 { // at least 2 lines left: one for show more records and one for new line(\n).
 		// have rows left
-		for k, v := range p.Address {
+		for addr, size := range p.Address {
 			if terminalRows <= 2 {
 				// hide left records
-				p.Writer.Write([]byte(fmt.Sprintf("more: %d record(s) hiden.\n", len(p.Address)-recordsWritten)))
 				break
 			} else {
-				p.log.WithFields(logrus.Fields{
-					"address": k,
-					"size":    v,
-				}).Info("connection size to remote proxy server.")
+				_, _ = fmt.Fprintf(w, "%s\t%d\t\n", addr, size)
 				terminalRows--
-				recordsWritten++
+				recordsHiden--
 			}
+		}
+		// log total connection size.
+		if recordsHiden == 0 {
+			_, _ = fmt.Fprintf(w, "TOTAL\t%d\t\n", p.ConnSize)
+		} else {
+			_, _ = w.Write([]byte(fmt.Sprintf("TOTAL\t%d\t(%d record(s) hiden)\t\n",
+				p.ConnSize, recordsHiden)))
 		}
 	}
 }
