@@ -6,7 +6,6 @@ import (
 	"github.com/genshen/wssocks/wss"
 	log "github.com/sirupsen/logrus"
 	"net/http"
-	"time"
 )
 
 var serverCommand = &cmds.Command{
@@ -22,7 +21,6 @@ func init() {
 	fs := flag.NewFlagSet("server", flag.ExitOnError)
 	serverCommand.FlagSet = fs
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
-	serverCommand.FlagSet.IntVar(&s.ticker, "ticker", 0, `ticker(ms) to send data to client.`)
 	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
 
 	serverCommand.Runner = &s
@@ -31,7 +29,6 @@ func init() {
 
 type server struct {
 	address string
-	ticker  int
 }
 
 func (s *server) PreRun() error {
@@ -39,11 +36,6 @@ func (s *server) PreRun() error {
 }
 
 func (s *server) Run() error {
-	if s.ticker != 0 {
-		ticker := wss.StartTicker(time.Microsecond * time.Duration(100))
-		defer ticker.Stop()
-	}
-
 	// new time ticker to flush data into websocket (to client).
 	http.HandleFunc("/", wss.ServeWs)
 	log.WithFields(log.Fields{

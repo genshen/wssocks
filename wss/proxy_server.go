@@ -4,24 +4,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/genshen/wssocks/wss/ticker"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
-	"io"
 	"net"
 	"sync"
 	"time"
 )
-
-// ticker for proxy server
-var proxyServerTicker *ticker.Ticker = nil
-
-func StartTicker(d time.Duration) *ticker.Ticker {
-	proxyServerTicker = ticker.NewTicker()
-	proxyServerTicker.Start(d)
-	return proxyServerTicker
-}
 
 type Connector struct {
 	Conn *net.TCPConn
@@ -174,46 +163,24 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string) error {
 	connector := s.AddConn(id, tcpConn.(*net.TCPConn))
 	defer s.Close(id)
 
-	if proxyServerTicker != nil {
-		var sendBuffer Base64WSBufferWriter
-		if _, err := sendBuffer.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
+	switch proxyType {
+	case ProxyTypeSocks5:
+		if err := s.WriteProxyMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 			return err
 		}
-
-		defer sendBuffer.Flush(websocket.TextMessage, id, &(s.ConcurrentWebSocket))
-		defer proxyServerTicker.Remove(ticker.TickId(id))
-
-		proxyServerTicker.Append(ticker.TickId(id), func() {
-			// fixme return error
-			if _, err := sendBuffer.Flush(websocket.TextMessage, id, &(s.ConcurrentWebSocket)); err != nil {
-				log.Error("error sending data via webSocket:", err)
-				return
-			}
-		})
-
-		if _, err := io.Copy(&sendBuffer, connector.Conn); err != nil {
+	case ProxyTypeHttp:
+		if err := s.WriteProxyMessage(id, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: Pyx\r\n\r\n")); err != nil {
 			return err
 		}
-	} else { // no ticker
-		switch proxyType {
-		case ProxyTypeSocks5:
-			if err := s.WriteProxyMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
-				return err
-			}
-		case ProxyTypeHttp:
-			if err := s.WriteProxyMessage(id, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: Pyx\r\n\r\n")); err != nil {
-				return err
-			}
-		}
+	}
 
-		var buffer = make([]byte, 1024*64)
-		for {
-			if n, err := connector.Conn.Read(buffer); err != nil {
-				return errors.New("read connection error:" + err.Error())
-			} else if n > 0 {
-				if err := s.WriteProxyMessage(id, buffer[:n]); err != nil {
-					return errors.New("error sending data via webSocket:" + err.Error())
-				}
+	var buffer = make([]byte, 1024*64)
+	for {
+		if n, err := connector.Conn.Read(buffer); err != nil {
+			return errors.New("read connection error:" + err.Error())
+		} else if n > 0 {
+			if err := s.WriteProxyMessage(id, buffer[:n]); err != nil {
+				return errors.New("error sending data via webSocket:" + err.Error())
 			}
 		}
 	}
