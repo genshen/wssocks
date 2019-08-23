@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	WsTpVer  = "version"
-	WsTpBeats  = "heart_beat"
+	WsTpVer   = "version"
+	WsTpBeats = "heart_beat"
 	WsTpClose = "finish"
 	WsTpData  = "data"
 	WsTpEst   = "est" // establish
@@ -66,6 +66,6 @@ type ProxyData struct {
 
 // Proxy message for establishing connection
 type ProxyEstMessage struct {
+	Type int `json:"proxy_type"`
 	Addr string `json:"addr"`
 }
-

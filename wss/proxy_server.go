@@ -132,7 +132,7 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 		} else {
 			go func() {
 				log.WithField("address", proxyEstMsg.Addr).Info("proxy  connecting to remote")
-				if err := s.establish(id, proxyEstMsg.Addr); err != nil {
+				if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr); err != nil {
 					log.Error(err) // todo error handle better way
 				}
 				log.WithField("address", proxyEstMsg.Addr).Info("disconnected to remote")
@@ -164,7 +164,7 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	return nil
 }
 
-func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
+func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string) error {
 	tcpConn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
 	if err != nil {
 		return err
@@ -194,11 +194,18 @@ func (s *ServerWS) establish(id ksuid.KSUID, addr string) error {
 		if _, err := io.Copy(&sendBuffer, connector.Conn); err != nil {
 			return err
 		}
-	} else {
-		// no ticker
-		if err := s.WriteProxyMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
-			return err
+	} else { // no ticker
+		switch proxyType {
+		case ProxyTypeSocks5:
+			if err := s.WriteProxyMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
+				return err
+			}
+		case ProxyTypeHttp:
+			if err := s.WriteProxyMessage(id, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: Pyx\r\n\r\n")); err != nil {
+				return err
+			}
 		}
+
 		var buffer = make([]byte, 1024*64)
 		for {
 			if n, err := connector.Conn.Read(buffer); err != nil {

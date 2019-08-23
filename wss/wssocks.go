@@ -26,9 +26,9 @@ func ListenAndServe(wsc *WebSocketClient, tick *ticker.Ticker, address string) e
 		}
 
 		go func() {
-			err := client.Reply(c, func(conn *net.TCPConn, addr string) error {
+			err := client.Reply(c, func(conn *net.TCPConn, proxyType int, addr string) error {
 				proxy := wsc.NewProxy(conn)
-				proxy.Serve(plog, wsc, tick, addr)
+				proxy.Serve(plog, wsc, tick, proxyType, addr)
 				wsc.TellClose(proxy.Id)
 				return nil // todo error
 			})
