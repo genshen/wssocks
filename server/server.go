@@ -21,6 +21,7 @@ func init() {
 	fs := flag.NewFlagSet("server", flag.ExitOnError)
 	serverCommand.FlagSet = fs
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
+	serverCommand.FlagSet.BoolVar(&s.http, "http", true, `enable http and https proxy.`)
 	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
 
 	serverCommand.Runner = &s
@@ -29,6 +30,7 @@ func init() {
 
 type server struct {
 	address string
+	http    bool // enable http and https proxy
 }
 
 func (s *server) PreRun() error {
@@ -36,8 +38,8 @@ func (s *server) PreRun() error {
 }
 
 func (s *server) Run() error {
-	// new time ticker to flush data into websocket (to client).
-	http.HandleFunc("/", wss.ServeWs)
+	config := wss.WebsocksServerConfig{EnableHttp: s.http}
+	http.HandleFunc("/", wss.ServeWsWrapper(config))
 	log.WithFields(log.Fields{
 		"listen address": s.address,
 	}).Info("listening on income message.")

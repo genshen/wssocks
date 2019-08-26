@@ -95,7 +95,7 @@ func (s *ServerWS) tellClosed(id ksuid.KSUID) {
 	}
 }
 
-func (s *ServerWS) dispatchMessage(data []byte) error {
+func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) error {
 	var socketData json.RawMessage
 	socketStream := WebSocketMessage{
 		Data: &socketData,
@@ -118,26 +118,31 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 		var proxyEstMsg ProxyEstMessage
 		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
 			return err
-		} else {
-			var estData []byte = nil
-			if proxyEstMsg.WithData {
-				if decodedBytes, err := base64.StdEncoding.DecodeString(proxyEstMsg.DataBase64); err != nil {
-					log.Error("base64 decode error,", err)
-					return err
-				} else {
-					estData = decodedBytes
-				}
-			}
-
-			go func() {
-				log.WithField("address", proxyEstMsg.Addr).Info("proxy  connecting to remote")
-				if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr, estData); err != nil {
-					log.Error(err) // todo error handle better way
-				}
-				log.WithField("address", proxyEstMsg.Addr).Info("disconnected to remote")
-				s.tellClosed(id) // tell client to close connection.
-			}()
 		}
+		// check proxy type support.
+		if (proxyEstMsg.Type == ProxyTypeHttp || proxyEstMsg.Type == ProxyTypeHttps) && !config.EnableHttp {
+			s.tellClosed(id) // tell client to close connection.
+			return errors.New("http(s) proxy is not support in server side")
+		}
+
+		var estData []byte = nil
+		if proxyEstMsg.WithData {
+			if decodedBytes, err := base64.StdEncoding.DecodeString(proxyEstMsg.DataBase64); err != nil {
+				log.Error("base64 decode error,", err)
+				return err
+			} else {
+				estData = decodedBytes
+			}
+		}
+
+		go func() {
+			log.WithField("address", proxyEstMsg.Addr).Info("proxy  connecting to remote")
+			if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr, estData); err != nil {
+				log.Error(err) // todo error handle better way
+			}
+			log.WithField("address", proxyEstMsg.Addr).Info("disconnected to remote")
+			s.tellClosed(id) // tell client to close connection.
+		}()
 	case WsTpData:
 		var requestMsg ProxyData
 		if err := json.Unmarshal(socketData, &requestMsg); err != nil {

@@ -26,6 +26,7 @@ func init() {
 	fs := flag.NewFlagSet(CommandNameClient, flag.ExitOnError)
 	clientCommand.FlagSet = fs
 	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5.`)
+	clientCommand.FlagSet.BoolVar(&client.http, "http", false, `enable http and https proxy.`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
 
 	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.
@@ -35,8 +36,9 @@ func init() {
 }
 
 type client struct {
-	address   string // local listening address
-	remote    string // string usr of server
+	address   string   // local listening address
+	http      bool     // enable http and https proxy
+	remote    string   // string usr of server
 	remoteUrl *url.URL // url of server
 	//	remoteHeader http.Header
 }
@@ -106,7 +108,7 @@ func (c *client) Run() error {
 	}()
 
 	// start listen for socks5 connection.
-	if err := wss.ListenAndServe(wsc, c.address); err != nil {
+	if err := wss.ListenAndServe(wsc, c.address, c.http); err != nil {
 		return err
 	}
 	return nil

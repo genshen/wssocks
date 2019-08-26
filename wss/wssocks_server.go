@@ -8,9 +8,18 @@ import (
 
 var upgrader = websocket.Upgrader{} // use default options
 
-// listen http port and serve it
-// serveWs handles websocket requests from the peer.
-func ServeWs(w http.ResponseWriter, r *http.Request) {
+type WebsocksServerConfig struct {
+	EnableHttp bool
+}
+
+// return a a function handling websocket requests from the peer.
+func ServeWsWrapper(config WebsocksServerConfig) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		serveWs(w, r, config);
+	}
+}
+
+func serveWs(w http.ResponseWriter, r *http.Request, config WebsocksServerConfig) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error(err)
@@ -44,7 +53,7 @@ func ServeWs(w http.ResponseWriter, r *http.Request) {
 			log.Error("error reading webSocket message:", err)
 			break
 		}
-		if err = sws.dispatchMessage(p); err != nil {
+		if err = sws.dispatchMessage(p, config); err != nil {
 			log.Error("error proxy:", err)
 			// break skip error
 		}
