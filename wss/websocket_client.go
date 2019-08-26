@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// WebSocketClient is a collection of proxy clients.
+// It can add/remove proxy clients from this collection,
+// and dispatch web socket message to a specific proxy client.
 type WebSocketClient struct {
 	ConcurrentWebSocket
 	proxies map[ksuid.KSUID]*ProxyClient // all proxies on this websocket.

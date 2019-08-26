@@ -1,6 +1,14 @@
 package wss
 
-import "net"
+import (
+	"net"
+)
+
+const (
+	ProxyTypeSocks5 = iota
+	ProxyTypeHttp
+	ProxyTypeHttps
+)
 
 type ProxyInterface interface {
 	ProxyType() int
@@ -10,13 +18,4 @@ type ProxyInterface interface {
 	ParseHeader(conn net.Conn, header []byte) (string, error)
 	// return data transformed in connection establishing step.
 	EstablishData(origin []byte) ([]byte, error)
-}
-
-type Socks5Client struct {
-}
-
-type HttpClient struct {
-}
-
-type HttpsClient struct {
 }

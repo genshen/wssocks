@@ -12,6 +12,7 @@ type ConcurrentWebSocketInterface interface {
 	WriteWSJSON(data interface{}) error
 }
 
+// add lock to websocket connection to make sure only one goroutine can write this websocket.
 type ConcurrentWebSocket struct {
 	WsConn *websocket.Conn
 	mu     sync.Mutex
