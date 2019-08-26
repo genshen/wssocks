@@ -119,9 +119,19 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
 			return err
 		} else {
+			var estData []byte = nil
+			if proxyEstMsg.WithData {
+				if decodedBytes, err := base64.StdEncoding.DecodeString(proxyEstMsg.DataBase64); err != nil {
+					log.Error("base64 decode error,", err)
+					return err
+				} else {
+					estData = decodedBytes
+				}
+			}
+
 			go func() {
 				log.WithField("address", proxyEstMsg.Addr).Info("proxy  connecting to remote")
-				if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr); err != nil {
+				if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr, estData); err != nil {
 					log.Error(err) // todo error handle better way
 				}
 				log.WithField("address", proxyEstMsg.Addr).Info("disconnected to remote")
@@ -153,7 +163,8 @@ func (s *ServerWS) dispatchMessage(data []byte) error {
 	return nil
 }
 
-func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string) error {
+// data: data send in establish step (can be nil).
+func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []byte) error {
 	tcpConn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
 	if err != nil {
 		return err
@@ -169,6 +180,12 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string) error {
 			return err
 		}
 	case ProxyTypeHttp:
+		if data != nil {
+			if _, err := connector.Conn.Write(data); err != nil {
+				return err
+			}
+		}
+	case ProxyTypeHttps:
 		if err := s.WriteProxyMessage(id, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: Pyx\r\n\r\n")); err != nil {
 			return err
 		}

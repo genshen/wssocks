@@ -43,13 +43,21 @@ func (p *ProxyClient) Close() {
 // handel socket dial results processing
 // copy income connection data to proxy serve via websocket
 func (p *ProxyClient) Serve(plog *term_view.ProgressLog, wsc *WebSocketClient,
-	proxyType int, addr string) error {
+	firstSendData []byte, proxyType int, addr string) error {
 	plog.Update(term_view.Status{IsNew: true, Address: addr})
 	defer plog.Update(term_view.Status{IsNew: false, Address: addr})
 	defer wsc.Close(p.Id)
 
-	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(),
-		Data: ProxyEstMessage{Type: proxyType, Addr: addr}}
+	estMsg := ProxyEstMessage{
+		Type:     proxyType,
+		Addr:     addr,
+		WithData: false,
+	}
+	if firstSendData != nil {
+		estMsg.WithData = true
+		estMsg.DataBase64 = base64.StdEncoding.EncodeToString(firstSendData)
+	}
+	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: estMsg}
 	if err := wsc.WriteWSJSON(&addrSend); err != nil {
 		log.Error("json error:", err)
 		return err
