@@ -3,11 +3,8 @@ package wss
 import (
 	"encoding/base64"
 	"github.com/genshen/wssocks/wss/term_view"
-	"github.com/genshen/wssocks/wss/ticker"
-	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
-	"io"
 	"net"
 )
 
@@ -45,45 +42,36 @@ func (p *ProxyClient) Close() {
 
 // handel socket dial results processing
 // copy income connection data to proxy serve via websocket
-func (p *ProxyClient) Serve(plog *term_view.ProgressLog, wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
+func (p *ProxyClient) Serve(plog *term_view.ProgressLog, wsc *WebSocketClient,
+	firstSendData []byte, proxyType int, addr string) error {
 	plog.Update(term_view.Status{IsNew: true, Address: addr})
 	defer plog.Update(term_view.Status{IsNew: false, Address: addr})
 	defer wsc.Close(p.Id)
 
-	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyEstMessage{Addr: addr}}
+	estMsg := ProxyEstMessage{
+		Type:     proxyType,
+		Addr:     addr,
+		WithData: false,
+	}
+	if firstSendData != nil {
+		estMsg.WithData = true
+		estMsg.DataBase64 = base64.StdEncoding.EncodeToString(firstSendData)
+	}
+	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: estMsg}
 	if err := wsc.WriteWSJSON(&addrSend); err != nil {
 		log.Error("json error:", err)
 		return err
 	}
 
-	if tick != nil {
-		var buffer Base64WSBufferWriter
-		defer buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
-
-		defer tick.Remove(ticker.TickId(p.Id))
-		tick.Append(ticker.TickId(p.Id), func() { // fixme return error
-			_, err := buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
-			if err != nil {
-				log.Error("write error:", err) // todo use of closed network connection
-			}
-		}) // todo p.id
-
-		if _, err := io.Copy(&buffer, p.Conn); err != nil { // copy data to buffer
-			log.Error("io copy error,", err)
-			return nil
-		}
-	} else {
-		// dont use ticker
-		var buffer = make([]byte, 1024*64)
-		for {
-			if n, err := p.Conn.Read(buffer); err != nil {
+	var buffer = make([]byte, 1024*64)
+	for {
+		if n, err := p.Conn.Read(buffer); err != nil {
+			break
+			// log.Println("read error:", err)
+		} else if n > 0 {
+			if err := wsc.WriteProxyMessage(p.Id, buffer[:n]); err != nil {
+				log.Error("write error:", err)
 				break
-				// log.Println("read error:", err)
-			} else if n > 0 {
-				if err := wsc.WriteProxyMessage(p.Id, buffer[:n]); err != nil {
-					log.Error("write error:", err)
-					break
-				}
 			}
 		}
 	}

@@ -2,13 +2,12 @@ package wss
 
 import (
 	"github.com/genshen/wssocks/wss/term_view"
-	"github.com/genshen/wssocks/wss/ticker"
 	log "github.com/sirupsen/logrus"
 	"net"
 )
 
 // listen on local address:port and forward socks5 requests to wssocks server.
-func ListenAndServe(wsc *WebSocketClient, tick *ticker.Ticker, address string) error {
+func ListenAndServe(wsc *WebSocketClient, address string) error {
 	s, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -26,9 +25,9 @@ func ListenAndServe(wsc *WebSocketClient, tick *ticker.Ticker, address string) e
 		}
 
 		go func() {
-			err := client.Reply(c, func(conn *net.TCPConn, addr string) error {
+			err := client.Reply(c, func(conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
 				proxy := wsc.NewProxy(conn)
-				proxy.Serve(plog, wsc, tick, addr)
+				proxy.Serve(plog, wsc, firstSendData, proxyType, addr)
 				wsc.TellClose(proxy.Id)
 				return nil // todo error
 			})
