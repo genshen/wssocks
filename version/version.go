@@ -7,7 +7,7 @@ import (
 	"github.com/genshen/wssocks/wss"
 )
 
-const VERSION = "0.2.1"
+const VERSION = "0.3.0-alpha"
 
 var versionCommand = &cmds.Command{
 	Name:        "version",
