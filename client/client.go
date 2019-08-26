@@ -54,6 +54,11 @@ func (c *client) PreRun() error {
 		c.remoteUrl = u
 	}
 
+	if c.http {
+		log.Info("http(s) proxy is enabled.")
+	} else {
+		log.Info("http(s) proxy is disabled.")
+	}
 	return nil
 }
 
@@ -86,12 +91,22 @@ func (c *client) Run() error {
 
 	// negotiate version
 	if version, err := wss.ExchangeVersion(wsc.WsConn); err != nil {
-		log.WithFields(log.Fields{
-			"version code":    version.VersionCode,
-			"version number:": version.Version,
-			"update address":  version.UpdateAddr,
-		}).Info("server version")
 		return err
+	} else {
+		log.WithFields(log.Fields{
+			"version code":   version.VersionCode,
+			"version number": version.Version,
+		}).Info("server version")
+
+		if version.VersionCode != wss.VersionCode {
+			return errors.New("incompatible protocol version of client and server")
+		}
+		if version.Version != wss.CoreVersion {
+			log.WithFields(log.Fields{
+				"client wssocks version": wss.CoreVersion,
+				"server wssocks version": version.Version,
+			}).Warning("different version of client and server wssocks")
+		}
 	}
 
 	// start websocket message listen.

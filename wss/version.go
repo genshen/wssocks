@@ -1,17 +1,16 @@
 package wss
 
 import (
-	"errors"
 	"github.com/gorilla/websocket"
 )
 
 // version of protocol.
 const VersionCode = 0x002
+const CoreVersion = "0.3.0-alpha"
 
 type VersionNeg struct {
 	Version     string `json:"version"`
 	VersionCode uint   `json:"version_code"`
-	UpdateAddr  string `json:"update_addr"`
 }
 
 // negotiate client and server version
@@ -26,9 +25,6 @@ func ExchangeVersion(wsConn *websocket.Conn) (VersionNeg, error) {
 	if err := wsConn.ReadJSON(&versionRec); err != nil {
 		return versionRec, err
 	}
-	if versionRec.VersionCode != VersionCode {
-		return versionRec, errors.New("incompatible protocol version of client and server")
-	}
 	return versionRec, nil
 }
 
@@ -40,6 +36,6 @@ func NegVersionServer(wsConn *websocket.Conn) error {
 		return err
 	}
 	// send to client
-	versionServer := VersionNeg{VersionCode: VersionCode} // todo more information
+	versionServer := VersionNeg{Version: CoreVersion, VersionCode: VersionCode} // todo more information
 	return wsConn.WriteJSON(&versionServer)
 }

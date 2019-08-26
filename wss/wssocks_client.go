@@ -70,7 +70,7 @@ func ListenAndServe(wsc *WebSocketClient, address string, enableHttp bool) error
 	if err != nil {
 		return err
 	}
-	log.WithField("local address", address).Info("listening on local address for incoming proxy request.")
+	log.WithField("local address", address).Info("listening on local address for incoming proxy requests.")
 
 	plog := term_view.NewPLog()
 	log.SetOutput(plog) // change log stdout to plog
