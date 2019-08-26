@@ -6,7 +6,7 @@ import (
 
 // version of protocol.
 const VersionCode = 0x002
-const CoreVersion = "0.3.0-alpha"
+const CoreVersion = "0.3.0-alpha.2"
 
 type VersionNeg struct {
 	Version     string `json:"version"`
