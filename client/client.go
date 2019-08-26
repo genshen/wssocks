@@ -5,12 +5,10 @@ import (
 	"flag"
 	"github.com/genshen/cmds"
 	"github.com/genshen/wssocks/wss"
-	"github.com/genshen/wssocks/wss/ticker"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
-	"time"
 )
 
 const CommandNameClient = "client"
@@ -29,7 +27,6 @@ func init() {
 	clientCommand.FlagSet = fs
 	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5.`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
-	clientCommand.FlagSet.IntVar(&client.ticker, "ticker", 0, `ticker(ms) to send data to client.`)
 
 	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.
 	clientCommand.Runner = &client
@@ -38,10 +35,9 @@ func init() {
 }
 
 type client struct {
-	address   string
-	remote    string
-	ticker    int
-	remoteUrl *url.URL
+	address   string // local listening address
+	remote    string // string usr of server
+	remoteUrl *url.URL // url of server
 	//	remoteHeader http.Header
 }
 
@@ -109,16 +105,8 @@ func (c *client) Run() error {
 		}
 	}()
 
-	// new time ticker to flush data into websocket (server).
-	var tick *ticker.Ticker = nil
-	if c.ticker != 0 {
-		tick = ticker.NewTicker()
-		tick.Start(time.Microsecond * time.Duration(c.ticker))
-		defer tick.Stop()
-	}
-
 	// start listen for socks5 connection.
-	if err := wss.ListenAndServe(wsc, tick, c.address); err != nil {
+	if err := wss.ListenAndServe(wsc, c.address); err != nil {
 		return err
 	}
 	return nil
