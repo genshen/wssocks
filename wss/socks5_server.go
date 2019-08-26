@@ -35,33 +35,32 @@ func (client *Client) Reply(conn net.Conn, onDial func(conn *net.TCPConn, firstS
 		return err
 	}
 
-	if n >= 2 && buffer[0] == 0x05 { //sock5 proxy
-		if addrSocks5, err := client.parseSocks5Header(conn); err != nil {
-			return err
-		} else {
-			proxyType = ProxyTypeSocks5
-			addr = addrSocks5
+	// select a matched proxy type
+	instances := [3]ProxyInterface{&Socks5Client{}, &HttpClient{}, &HttpsClient{}}
+	var matchedInstance ProxyInterface = nil
+	for _, proxyInstance := range instances {
+		if proxyInstance.Trigger(buffer[:n]) {
+			matchedInstance = proxyInstance
+			break
 		}
-	} else if n > len("CONNECT") && string(buffer[:len("CONNECT")]) == "CONNECT" {
-		// is https proxy
-		if addrHttp, err := client.parseHttpsHeader(buffer[:], n); err != nil {
-			return err
-		} else {
-			proxyType = ProxyTypeHttps
-			addr = addrHttp
-		}
-	} else if (n > len("GET") && string(buffer[:len("GET")]) == "GET") ||
-		(n > len("POST") && string(buffer[:len("POST")]) == "POST") {
-		// is http proxy
-		if addrHttp, newBuffer, err := client.parseHttpHeader(buffer[:n], n); err != nil {
-			return err
-		} else {
-			proxyType = ProxyTypeHttp
-			addr = addrHttp
-			firstSendData = newBuffer
-		}
+	}
+
+	if matchedInstance == nil {
+		return errors.New("only socks5 or http(s) proxy")
+	}
+
+	// set address and type
+	if proxyAddr, err := matchedInstance.ParseHeader(conn, buffer[:n]); err != nil {
+		return err
 	} else {
-		return errors.New("only socks5 or http proxy")
+		proxyType = matchedInstance.ProxyType()
+		addr = proxyAddr
+	}
+	// set data sent in establish step.
+	if newBuffer, err := matchedInstance.EstablishData(buffer[:n]); err != nil {
+		return err
+	} else {
+		firstSendData = newBuffer
 	}
 
 	//  dial to target.
@@ -69,12 +68,23 @@ func (client *Client) Reply(conn net.Conn, onDial func(conn *net.TCPConn, firstS
 	if err := onDial(conn.(*net.TCPConn), firstSendData, proxyType, addr); err != nil {
 		return err
 	}
-
 	return nil
 }
 
+func (client *Socks5Client) ProxyType() int {
+	return ProxyTypeSocks5
+}
+
+func (client *Socks5Client) Trigger(data []byte) bool {
+	return len(data) >= 2 && data[0] == 0x05
+}
+
+func (client *Socks5Client) EstablishData(origin []byte) ([]byte, error) {
+	return nil, nil
+}
+
 // parsing socks5 header, and return address and parsing error
-func (client *Client) parseSocks5Header(conn net.Conn) (string, error) {
+func (client *Socks5Client) ParseHeader(conn net.Conn, header []byte) (string, error) {
 	// response to socks5 client
 	// see rfc 1982 for more details (https://tools.ietf.org/html/rfc1928)
 	n, err := conn.Write([]byte{0x05, 0x00}) // version and no authentication required
@@ -135,9 +145,21 @@ func (client *Client) parseSocks5Header(conn net.Conn) (string, error) {
 	return net.JoinHostPort(host, strconv.Itoa((int(port[0])<<8)|int(port[1]))), nil
 }
 
+func (client *HttpsClient) ProxyType() int {
+	return ProxyTypeHttps
+}
+
+func (client *HttpsClient) Trigger(data []byte) bool {
+	return len(data) > len("CONNECT") && string(data[:len("CONNECT")]) == "CONNECT"
+}
+
+func (client *HttpsClient) EstablishData(origin []byte) ([]byte, error) {
+	return nil, nil
+}
+
 // parsing https header, and return address and parsing error
-func (client *Client) parseHttpsHeader(buffer []byte, n int) (string, error) {
-	buff := bytes.NewBuffer(buffer)
+func (client *HttpsClient) ParseHeader(conn net.Conn, header []byte) (string, error) {
+	buff := bytes.NewBuffer(header)
 	if line, _, err := bufio.NewReader(buff).ReadLine(); err != nil {
 		return "", err
 	} else {
@@ -154,9 +176,9 @@ func (client *Client) parseHttpsHeader(buffer []byte, n int) (string, error) {
 					host = u.Scheme + ":443"
 				} else { // https
 					if u.Port() == "" {
-						host = u.Host + ":443"
+						host = net.JoinHostPort(u.Host, "443")
 					} else {
-						host = u.Host + ":" + u.Port()
+						host = net.JoinHostPort(u.Host, u.Port())
 					}
 				}
 				return host, nil
@@ -165,39 +187,70 @@ func (client *Client) parseHttpsHeader(buffer []byte, n int) (string, error) {
 	}
 }
 
+func (client *HttpClient) ProxyType() int {
+	return ProxyTypeHttp
+}
+
+func (client *HttpClient) Trigger(data []byte) bool {
+	// now, we only support GET and POST request.
+	return (len(data) > len("GET") && string(data[:len("GET")]) == "GET") ||
+		(len(data) > len("POST") && string(data[:len("POST")]) == "POST")
+}
+
+func (client *HttpClient) EstablishData(origin []byte) ([]byte, error) {
+	if method, address, ver, n, err := client.parseFirstLine(origin); err != nil {
+		return nil, err
+	} else {
+		if u, err := url.Parse(address); err != nil {
+			return nil, err
+		} else {
+			// get path?query#fragment
+			u.Host = ""
+			u.Scheme = ""
+			newBuff := bytes.NewBuffer(nil)
+			newBuff.WriteString(fmt.Sprintf("%s %s %s", method, u.String(), ver))
+			newBuff.Write(origin[n:]) // append origin header and body data.
+			return newBuff.Bytes(), nil
+		}
+	}
+}
+
 // parsing http header, and return address and parsing error
-func (client *Client) parseHttpHeader(buffer []byte, n int) (string, []byte, error) {
-	buff := bytes.NewBuffer(buffer)
+func (client *HttpClient) ParseHeader(conn net.Conn, header []byte) (string, error) {
+	if _, address, _, _, err := client.parseFirstLine(header); err != nil {
+		return "", err
+	} else {
+		if u, err := url.Parse(address); err != nil {
+			return "", err
+		} else {
+			var host string
+			// parsing port and host
+			if u.Opaque == "80" { // https
+				host = u.Scheme + ":80"
+			} else { // http
+				if u.Port() == "" {
+					host = net.JoinHostPort(u.Host, "80")
+				} else {
+					host = net.JoinHostPort(u.Host, u.Port())
+				}
+
+			}
+			return host, nil
+		}
+	}
+}
+
+// parse first line of http header, returning method, address, http version and the bytes of first line.
+func (client *HttpClient) parseFirstLine(data []byte) (method, address, ver string, n int, err error) {
+	buff := bytes.NewBuffer(data)
 	if line, _, err := bufio.NewReader(buff).ReadLine(); err != nil {
-		return "", nil, err
+		return "", "", "", len(line), err
 	} else {
 		var method, address, ver string
 		if _, err := fmt.Sscanf(string(line), "%s %s %s", &method, &address, &ver); err != nil {
-			return "", nil, err
+			return "", "", "", len(line), err
 		} else {
-			if u, err := url.Parse(address); err != nil {
-				return "", nil, err
-			} else {
-				var host string
-				// parsing port and host
-				if u.Opaque == "80" { // https
-					host = u.Scheme + ":80"
-				} else { // http
-					if u.Port() == "" {
-						host = u.Host + ":80"
-					} else {
-						host = u.Host + ":" + u.Port()
-					}
-
-				}
-				// get path?query#fragment
-				u.Host = ""
-				u.Scheme = ""
-				newBuff := bytes.NewBuffer(nil)
-				newBuff.WriteString(fmt.Sprintf("%s %s %s", method, u.String(), ver))
-				newBuff.Write(buffer[len(line):]) // append origin header and body data.
-				return host, newBuff.Bytes(), nil
-			}
+			return method, address, ver, len(line), nil
 		}
 	}
 }
