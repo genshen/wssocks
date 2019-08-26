@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -136,11 +137,13 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 		}
 
 		go func() {
-			log.WithField("address", proxyEstMsg.Addr).Info("proxy  connecting to remote")
+			log.WithField("size", s.GetConnectorSize()+1).Trace("connection size changed.")
+			log.WithField("address", proxyEstMsg.Addr).Trace("proxy connecting to remote")
 			if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr, estData); err != nil {
 				log.Error(err) // todo error handle better way
 			}
-			log.WithField("address", proxyEstMsg.Addr).Info("disconnected to remote")
+			log.WithField("address", proxyEstMsg.Addr).Trace("disconnected to remote")
+			log.WithField("size", s.GetConnectorSize()).Trace("connection size changed.")
 			s.tellClosed(id) // tell client to close connection.
 		}()
 	case WsTpData:
@@ -199,6 +202,9 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 	var buffer = make([]byte, 1024*64)
 	for {
 		if n, err := connector.Conn.Read(buffer); err != nil {
+			if err == io.EOF {
+				return nil
+			}
 			return errors.New("read connection error:" + err.Error())
 		} else if n > 0 {
 			if err := s.WriteProxyMessage(id, buffer[:n]); err != nil {

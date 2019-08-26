@@ -42,7 +42,7 @@ func (s *server) Run() error {
 	http.HandleFunc("/", wss.ServeWsWrapper(config))
 	log.WithFields(log.Fields{
 		"listen address": s.address,
-	}).Info("listening on income message.")
+	}).Info("listening for incoming messages.")
 	log.Fatal(http.ListenAndServe(s.address, nil))
 	return nil
 }

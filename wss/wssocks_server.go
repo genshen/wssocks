@@ -3,6 +3,7 @@ package wss
 import (
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"net/http"
 )
 
@@ -44,12 +45,10 @@ func serveWs(w http.ResponseWriter, r *http.Request, config WebsocksServerConfig
 	sws := NewServerWS(ws)
 	// read messages from webSocket
 	for {
-		log.WithField("size", sws.GetConnectorSize()).Trace("connection size changed.")
 		_, p, err := ws.ReadMessage()
 		// if WebSocket is closed by some reason, then this func will return,
 		// and 'done' channel will be set, the outer func will reach to the end.
-		// then ssh session will be closed in defer.
-		if err != nil {
+		if err != nil && err != io.EOF {
 			log.Error("error reading webSocket message:", err)
 			break
 		}
