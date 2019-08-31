@@ -14,7 +14,7 @@ import (
 )
 
 type Connector struct {
-	Conn *net.TCPConn
+	Conn io.ReadWriteCloser
 }
 
 // proxy server, which handles many tcp connection
@@ -32,7 +32,7 @@ func NewServerWS(conn *websocket.Conn) *ServerWS {
 }
 
 // add a tcp connection to connection pool.
-func (s *ServerWS) AddConn(id ksuid.KSUID, conn *net.TCPConn) *Connector {
+func (s *ServerWS) AddConn(id ksuid.KSUID, conn io.ReadWriteCloser) *Connector {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	connector := Connector{Conn: conn}

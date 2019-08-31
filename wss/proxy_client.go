@@ -5,12 +5,12 @@ import (
 	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
-	"net"
+	"io"
 )
 
 // proxy client handle one connection, send data to proxy server vai websocket.
 type ProxyClient struct {
-	Conn     *net.TCPConn
+	Conn     io.ReadWriteCloser
 	Id       ksuid.KSUID
 	isClosed bool
 }

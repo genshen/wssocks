@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
-	"net"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -40,7 +40,7 @@ func NewWebSocketClient(dialer *websocket.Dialer, addr string, header http.Heade
 }
 
 // create a new proxy with unique id
-func (wsc *WebSocketClient) NewProxy(conn *net.TCPConn) *ProxyClient {
+func (wsc *WebSocketClient) NewProxy(conn io.ReadWriteCloser) *ProxyClient {
 	id := ksuid.New()
 	proxy := ProxyClient{Id: id, Conn: conn}
 	proxy.isClosed = false
