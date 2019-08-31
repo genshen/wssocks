@@ -17,34 +17,42 @@ type Connector struct {
 	Conn io.ReadWriteCloser
 }
 
+type ClientData ServerData
+
+type ProxyServer struct {
+	Id     ksuid.KSUID
+	client chan ClientData // data from client todo data with type
+	close  chan bool       // close connection by this channel
+}
+
 // proxy server, which handles many tcp connection
 type ServerWS struct {
 	ConcurrentWebSocket
 	mu       sync.RWMutex
-	connPool map[ksuid.KSUID]*Connector
+	connPool map[ksuid.KSUID]*ProxyServer
 }
 
 // create a new websocket server handler
 func NewServerWS(conn *websocket.Conn) *ServerWS {
 	sws := ServerWS{ConcurrentWebSocket: ConcurrentWebSocket{WsConn: conn}}
-	sws.connPool = make(map[ksuid.KSUID]*Connector)
+	sws.connPool = make(map[ksuid.KSUID]*ProxyServer)
 	return &sws
 }
 
 // add a tcp connection to connection pool.
-func (s *ServerWS) AddConn(id ksuid.KSUID, conn io.ReadWriteCloser) *Connector {
+func (s *ServerWS) AddConn(id ksuid.KSUID, client chan ClientData, close chan bool) *ProxyServer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	connector := Connector{Conn: conn}
-	s.connPool[id] = &connector
-	return &connector
+	proxy := ProxyServer{Id: id, client: client, close: close}
+	s.connPool[id] = &proxy
+	return &proxy
 }
 
-func (s *ServerWS) GetConnectorById(id ksuid.KSUID) *Connector {
+func (s *ServerWS) GetProxyById(id ksuid.KSUID) *ProxyServer {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if connector, ok := s.connPool[id]; ok {
-		return connector
+	if proxy, ok := s.connPool[id]; ok {
+		return proxy
 	}
 	return nil
 }
@@ -55,36 +63,26 @@ func (s *ServerWS) GetConnectorSize() int {
 	return len(s.connPool)
 }
 
-// close a connection specified by id.
-func (s *ServerWS) Close(id ksuid.KSUID) error {
+// remove a connection specified by id.
+func (s *ServerWS) RemoveProxy(id ksuid.KSUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if connector, ok := s.connPool[id]; ok {
-		err := connector.Conn.Close();
+	if _, ok := s.connPool[id]; ok {
 		delete(s.connPool, id)
-		return err
 	}
-	return nil
 }
 
-// close all connections in pool
-func (s *ServerWS) CloseAll(id ksuid.KSUID) error {
+// remove all connections in pool
+func (s *ServerWS) RemoveAll(id ksuid.KSUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var err error
-	for id, conn := range s.connPool {
-		if err != nil {
-			_ = conn.Conn.Close()
-		} else {
-			err = conn.Conn.Close() // set error as return
-		}
+	for id := range s.connPool {
 		delete(s.connPool, id)
 	}
-	return err
 }
 
 // tell the client the connection has been closed
-func (s *ServerWS) tellClosed(id ksuid.KSUID) {
+func (s *ServerWS) tellClosed(id ksuid.KSUID) error {
 	// send finish flag to client
 	finish := WebSocketMessage{
 		Id:   id.String(),
@@ -92,8 +90,9 @@ func (s *ServerWS) tellClosed(id ksuid.KSUID) {
 		Data: nil,
 	}
 	if err := s.WriteWSJSON(&finish); err != nil {
-		return
+		return err
 	}
+	return nil
 }
 
 func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) error {
@@ -114,7 +113,10 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 	switch socketStream.Type {
 	case WsTpBeats: // heart beats
 	case WsTpClose: // closed by client
-		return s.Close(id)
+		if proxy := s.GetProxyById(id); proxy != nil {
+			proxy.close <- false
+		}
+		return nil
 	case WsTpEst: // establish
 		var proxyEstMsg ProxyEstMessage
 		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
@@ -137,6 +139,7 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 		}
 
 		go func() {
+			// todo size is only one client's size.
 			log.WithField("size", s.GetConnectorSize()+1).Trace("connection size changed.")
 			log.WithField("address", proxyEstMsg.Addr).Trace("proxy connecting to remote")
 			if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr, estData); err != nil {
@@ -152,19 +155,14 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 			return err
 		}
 
-		if connector := s.GetConnectorById(id); connector != nil {
-			//go func() {
+		if proxy := s.GetProxyById(id); proxy != nil {
 			// write income data from websocket to TCP connection
 			if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
 				log.Error("base64 decode error,", err)
 				return err
 			} else {
-				if _, err := connector.Conn.Write(decodeBytes); err != nil {
-					s.tellClosed(id)
-					return s.Close(id) // also closed= tcp connection if it exists
-				}
+				proxy.client <- ClientData{Type: requestMsg.Type, Data: decodeBytes}
 			}
-			// }()
 		}
 		return nil
 	}
@@ -177,10 +175,16 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 	if err != nil {
 		return err
 	}
+	defer tcpConn.Close()
+
+	closed := make(chan bool)
+	client := make(chan ClientData)
+	defer close(closed)
+	defer close(client)
 
 	// todo check exists
-	connector := s.AddConn(id, tcpConn.(*net.TCPConn))
-	defer s.Close(id)
+	proxy := s.AddConn(id, client, closed)
+	defer s.RemoveProxy(id)
 
 	switch proxyType {
 	case ProxyTypeSocks5:
@@ -189,7 +193,7 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 		}
 	case ProxyTypeHttp:
 		if data != nil {
-			if _, err := connector.Conn.Write(data); err != nil {
+			if _, err := tcpConn.Write(data); err != nil {
 				return err
 			}
 		}
@@ -199,18 +203,26 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 		}
 	}
 
-	var buffer = make([]byte, 1024*64)
+	go func() {
+		writer := WebSocketWriter{WSC: &s.ConcurrentWebSocket, Id: proxy.Id}
+		if _, err := io.Copy(&writer, tcpConn); err != nil {
+			log.Error("copy error,", err)
+		}
+		closed <- true
+	}()
+
 	for {
-		if n, err := connector.Conn.Read(buffer); err != nil {
-			if err == io.EOF {
-				return nil
+		select {
+		case tellClose := <-closed:
+			if tellClose {
+				return s.tellClosed(proxy.Id)
 			}
-			return errors.New("read connection error:" + err.Error())
-		} else if n > 0 {
-			if err := s.WriteProxyMessage(id, buffer[:n]); err != nil {
-				return errors.New("error sending data via webSocket:" + err.Error())
+			return nil
+		case client := <-client: // data received from client
+			if _, err := tcpConn.Write(client.Data); err != nil {
+				s.tellClosed(proxy.Id)
+				return err
 			}
 		}
 	}
-	return nil
 }
