@@ -44,3 +44,17 @@ func (wsc *ConcurrentWebSocket) WriteWSJSON(data interface{}) error {
 	defer wsc.mu.Unlock()
 	return wsc.WsConn.WriteJSON(data)
 }
+
+type WebSocketWriter struct {
+	WSC  *ConcurrentWebSocket
+	Id   ksuid.KSUID // connection id.
+	Type int         // type of trans data.
+}
+
+func (writer *WebSocketWriter) Write(buffer []byte) (n int, err error) {
+	if err := writer.WSC.WriteProxyMessage(writer.Id, buffer); err != nil {
+		return 0, err
+	} else {
+		return len(buffer), nil
+	}
+}

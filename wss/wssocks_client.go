@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/genshen/wssocks/wss/term_view"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"net"
 )
 
@@ -84,10 +85,51 @@ func ListenAndServe(wsc *WebSocketClient, address string, enableHttp bool) error
 
 		go func() {
 			err := client.Reply(c, enableHttp, func(conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
-				proxy := wsc.NewProxy(conn)
-				proxy.Serve(plog, wsc, firstSendData, proxyType, addr)
-				wsc.TellClose(proxy.Id)
-				return nil // todo error
+				defer conn.Close()
+
+				plog.Update(term_view.Status{IsNew: true, Address: addr})
+				defer plog.Update(term_view.Status{IsNew: false, Address: addr})
+
+				closed := make(chan bool)
+				cherr := make(chan error)
+				server := make(chan ServerData)
+				defer close(closed)
+				defer close(cherr)
+				defer close(server)
+
+				proxy := wsc.NewProxy(conn, server, closed, cherr)
+				defer wsc.RemoveProxy(proxy.Id)
+
+				if err := proxy.Establish(plog, wsc, firstSendData, proxyType, addr); err != nil {
+					wsc.TellClose(proxy.Id)
+					return err
+				}
+
+				// listen incoming data from proxy client application.
+				go func() {
+					writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id}
+					if _, err := io.Copy(&writer, conn); err != nil {
+						log.Error("write error:", err)
+					}
+					closed <- true
+				}()
+
+				for {
+					select {
+					case err := <-cherr: // errors receiving from server.
+						return err
+					case tellClose := <-closed:
+						if tellClose {
+							return wsc.TellClose(proxy.Id)
+						}
+						return nil
+					case ser := <-server:
+						if _, err := conn.Write(ser.Data); err != nil {
+							wsc.TellClose(proxy.Id)
+							return err
+						}
+					}
+				}
 			})
 			if err != nil {
 				log.Error(err)

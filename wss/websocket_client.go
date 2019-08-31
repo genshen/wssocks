@@ -1,6 +1,7 @@
 package wss
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
@@ -40,10 +41,10 @@ func NewWebSocketClient(dialer *websocket.Dialer, addr string, header http.Heade
 }
 
 // create a new proxy with unique id
-func (wsc *WebSocketClient) NewProxy(conn io.ReadWriteCloser) *ProxyClient {
+func (wsc *WebSocketClient) NewProxy(conn io.ReadWriteCloser, server chan ServerData,
+	close chan bool, cherr chan error) *ProxyClient {
 	id := ksuid.New()
-	proxy := ProxyClient{Id: id, Conn: conn}
-	proxy.isClosed = false
+	proxy := ProxyClient{Id: id, server: server, close: close, cherr: cherr}
 
 	wsc.proxyMu.Lock()
 	defer wsc.proxyMu.Unlock()
@@ -75,12 +76,11 @@ func (wsc *WebSocketClient) TellClose(id ksuid.KSUID) error {
 	return nil
 }
 
-// close current (TCP) connection
-func (wsc *WebSocketClient) Close(id ksuid.KSUID) {
+// remove current proxy by id
+func (wsc *WebSocketClient) RemoveProxy(id ksuid.KSUID) {
 	wsc.proxyMu.Lock()
 	defer wsc.proxyMu.Unlock()
-	if proxy, ok := wsc.proxies[id]; ok {
-		proxy.Close()
+	if _, ok := wsc.proxies[id]; ok {
 		delete(wsc.proxies, id)
 	}
 }
@@ -109,18 +109,19 @@ func (wsc *WebSocketClient) ListenIncomeMsg() error {
 				// now, we known the id and type of incoming data
 				switch socketStream.Type {
 				case WsTpClose: // remove proxy
-					wsc.Close(ksid)
+					proxy.close <- false
 				case WsTpData:
 					var proxyData ProxyData
 					if err := json.Unmarshal(socketData, &proxyData); err != nil {
-						wsc.Close(ksid)
-						wsc.TellClose(ksid)
+						proxy.cherr <- err
 						continue
 					}
-					if err := proxy.DispatchData(&proxyData); err != nil {
-						wsc.Close(ksid)
-						wsc.TellClose(ksid)
+					if decodeBytes, err := base64.StdEncoding.DecodeString(proxyData.DataBase64); err != nil {
+						proxy.cherr <- err
 						continue
+					} else {
+						// just write data back
+						proxy.server <- ServerData{Type: proxyData.Type, Data: decodeBytes}
 					}
 				}
 			}
