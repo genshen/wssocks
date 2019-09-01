@@ -26,9 +26,9 @@ func init() {
 	var client client
 	fs := flag.NewFlagSet(CommandNameClient, flag.ExitOnError)
 	clientCommand.FlagSet = fs
-	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5.`)
+	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5 proxy.`)
 	clientCommand.FlagSet.BoolVar(&client.http, "http", false, `enable http and https proxy.`)
-	clientCommand.FlagSet.StringVar(&client.httpAddr, "http-addr", ":1086", `listen address of http and https(if enabled).`)
+	clientCommand.FlagSet.StringVar(&client.httpAddr, "http-addr", ":1086", `listen address of http proxy (if enabled).`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
 
 	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.

@@ -40,6 +40,9 @@ if http(s) proxy in server side is enabled:
 # client siede
 wssocks client --addr :1080 --remote ws://example.com:1088 --http
 ```
+The http proxy listen address is specified by `--http-addr` in client side (default value is `:1086`),
+and https proxy listen address is the same as socks5 proxy listen address(specified by `--addr` option).
+
 Then you can set server address of http and https proxy as `:1080` 
 in your http(s) proxy client (e.g. mac's network preferences).
 
