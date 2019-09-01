@@ -24,9 +24,9 @@ type Connector struct {
 type ClientData ServerData
 
 type ProxyServer struct {
-	Id     ksuid.KSUID
-	client chan ClientData // data from client todo data with type
-	close  chan bool       // close connection by this channel
+	Id       ksuid.KSUID
+	onData   func(ClientData) // data from client todo data with type
+	onClosed func(bool)       // close connection, param bool: do tellClose if true
 }
 
 // proxy server, which handles many tcp connection
@@ -44,10 +44,10 @@ func NewServerWS(conn *websocket.Conn) *ServerWS {
 }
 
 // add a tcp connection to connection pool.
-func (s *ServerWS) AddConn(id ksuid.KSUID, client chan ClientData, close chan bool) *ProxyServer {
+func (s *ServerWS) AddConn(id ksuid.KSUID, onData func(ClientData), onClosed func(bool)) *ProxyServer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	proxy := ProxyServer{Id: id, client: client, close: close}
+	proxy := ProxyServer{Id: id, onData: onData, onClosed: onClosed}
 	s.connPool[id] = &proxy
 	return &proxy
 }
@@ -118,7 +118,7 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 	case WsTpBeats: // heart beats
 	case WsTpClose: // closed by client
 		if proxy := s.GetProxyById(id); proxy != nil {
-			proxy.close <- false
+			proxy.onClosed(false)
 		}
 		return nil
 	case WsTpEst: // establish
@@ -170,7 +170,7 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 				log.Error("base64 decode error,", err)
 				return err
 			} else {
-				proxy.client <- ClientData{Tag: requestMsg.Tag, Data: decodeBytes}
+				proxy.onData(ClientData{Tag: requestMsg.Tag, Data: decodeBytes})
 			}
 		}
 		return nil
@@ -186,13 +186,21 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 	}
 	defer tcpConn.Close()
 
-	closed := make(chan bool, 2)
-	client := make(chan ClientData)
-	//defer close(closed)
-	defer close(client)
+	type Done struct {
+		tell bool
+		err  error
+	}
+	done := make(chan Done, 2)
+	//defer close(done)
 
 	// todo check exists
-	proxy := s.AddConn(id, client, closed)
+	proxy := s.AddConn(id, func(data ClientData) {
+		if _, err := tcpConn.Write(data.Data); err != nil {
+			done <- Done{true, err}
+		}
+	}, func(tell bool) {
+		done <- Done{tell, err}
+	})
 	defer s.RemoveProxy(id)
 
 	switch proxyType {
@@ -211,23 +219,16 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 		if _, err := io.Copy(&writer, tcpConn); err != nil {
 			log.Error("copy error,", err)
 		}
-		closed <- true
+		done <- Done{true, nil}
 	}()
 
-	for {
-		select {
-		case tellClose := <-closed:
-			if tellClose {
-				return s.tellClosed(proxy.Id)
-			}
-			return nil
-		case client := <-client: // data received from client
-			if _, err := tcpConn.Write(client.Data); err != nil {
-				s.tellClosed(proxy.Id)
-				return err
-			}
-		}
+	d := <-done
+	s.RemoveProxy(proxy.Id)
+	// tellClosed is called outside this func.
+	if d.err != nil {
+		return d.err
 	}
+	return nil
 }
 
 func (s *ServerWS) establishHttp(id ksuid.KSUID, proxyType int, addr string, header []byte) error {
@@ -242,8 +243,16 @@ func (s *ServerWS) establishHttp(id ksuid.KSUID, proxyType int, addr string, hea
 	defer close(closed)
 	defer close(client)
 
-	bodyReadCloser := NewHttpProxyBody(closed, client)
-	proxy := s.AddConn(id, client, closed)
+	bodyReadCloser := NewBufferWR()
+	proxy := s.AddConn(id, func(data ClientData) {
+		if data.Tag == TagNoMore {
+			bodyReadCloser.Close() // close due to no more data.
+			return
+		}
+		bodyReadCloser.Write(data.Data)
+	}, func(tell bool) {
+		bodyReadCloser.Close() // close from client
+	})
 	defer s.RemoveProxy(id)
 	defer func() {
 		if !bodyReadCloser.isClosed() { // if it is not closed by client.
@@ -278,49 +287,4 @@ func (s *ServerWS) establishHttp(id ksuid.KSUID, proxyType int, addr string, hea
 		return errors.New(fmt.Sprintf("http body copy error: %s", err))
 	}
 	return nil
-}
-
-type HttpProxyBody struct {
-	closed  chan bool
-	data    chan ClientData
-	done    bool
-	closeCh bool
-}
-
-func (b *HttpProxyBody) Read(p []byte) (int, error) {
-	if b.done {
-		return 0, io.EOF
-	}
-
-	select {
-	case client := <-b.data: // data received from client
-		if client.Tag == TagNoMore {
-			b.done = true
-		}
-		for i, b := range client.Data {
-			p[i] = b
-		}
-		return len(client.Data), nil
-	case <-b.closed:
-		b.done = true
-		b.closeCh = true
-		return 0, io.EOF
-	}
-}
-
-func (b *HttpProxyBody) Close() error {
-	b.done = true
-	// fixme add a chan to close select if not finished.
-	return nil
-}
-
-func (b *HttpProxyBody) isClosed() bool {
-	return b.done
-}
-func (b *HttpProxyBody) isClosedInCh() bool {
-	return b.closeCh
-}
-
-func NewHttpProxyBody(closed chan bool, data chan ClientData) *HttpProxyBody {
-	return &HttpProxyBody{closed: closed, data: data, done: false, closeCh: false}
 }
