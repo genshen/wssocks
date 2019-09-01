@@ -6,10 +6,12 @@ import (
 
 // version of protocol.
 const VersionCode = 0x003
+const CompVersion = 0x003
 const CoreVersion = "0.3.0"
 
 type VersionNeg struct {
 	Version     string `json:"version"`
+	CompVersion uint   `json:"comp_version"` // Compatible version code
 	VersionCode uint   `json:"version_code"`
 }
 
@@ -18,7 +20,7 @@ type VersionNeg struct {
 // client can receive a message from server with server version number.
 func ExchangeVersion(wsConn *websocket.Conn) (VersionNeg, error) {
 	var versionRec VersionNeg
-	versionServer := VersionNeg{VersionCode: VersionCode}
+	versionServer := VersionNeg{Version: CoreVersion, VersionCode: VersionCode}
 	if err := wsConn.WriteJSON(&versionServer); err != nil {
 		return versionRec, err
 	}
@@ -36,6 +38,6 @@ func NegVersionServer(wsConn *websocket.Conn) error {
 		return err
 	}
 	// send to client
-	versionServer := VersionNeg{Version: CoreVersion, VersionCode: VersionCode} // todo more information
+	versionServer := VersionNeg{Version: CoreVersion, CompVersion: CompVersion, VersionCode: VersionCode} // todo more information
 	return wsConn.WriteJSON(&versionServer)
 }

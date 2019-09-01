@@ -97,11 +97,12 @@ func (c *client) Run() error {
 		return err
 	} else {
 		log.WithFields(log.Fields{
-			"version code":   version.VersionCode,
-			"version number": version.Version,
+			"compatible version code": version.CompVersion,
+			"version code":            version.VersionCode,
+			"version number":          version.Version,
 		}).Info("server version")
 
-		if version.VersionCode != wss.VersionCode {
+		if version.CompVersion > wss.VersionCode || wss.VersionCode > version.VersionCode {
 			return errors.New("incompatible protocol version of client and server")
 		}
 		if version.Version != wss.CoreVersion {
