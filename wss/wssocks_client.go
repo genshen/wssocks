@@ -97,7 +97,7 @@ func ListenAndServe(wsc *WebSocketClient, address string, enableHttp bool) error
 				defer close(cherr)
 				defer close(server)
 
-				proxy := wsc.NewProxy(conn, server, closed, cherr)
+				proxy := wsc.NewProxy(server, closed, cherr)
 				defer wsc.RemoveProxy(proxy.Id)
 
 				if err := proxy.Establish(plog, wsc, firstSendData, proxyType, addr); err != nil {

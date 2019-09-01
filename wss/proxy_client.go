@@ -16,7 +16,7 @@ type ProxyClient struct {
 }
 
 type ServerData struct {
-	Type int
+	Tag int
 	Data []byte
 }
 

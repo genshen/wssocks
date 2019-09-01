@@ -58,7 +58,7 @@ type WebSocketMessage struct {
 
 // Proxy data (from server to client or from client to server)
 type ProxyData struct {
-	Type       int    `json:"proxy_type"`
+	Tag        int    `json:"tag"`
 	DataBase64 string `json:"base64"`
 }
 

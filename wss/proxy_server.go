@@ -161,7 +161,7 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 				log.Error("base64 decode error,", err)
 				return err
 			} else {
-				proxy.client <- ClientData{Type: requestMsg.Type, Data: decodeBytes}
+				proxy.client <- ClientData{Tag: requestMsg.Tag, Data: decodeBytes}
 			}
 		}
 		return nil

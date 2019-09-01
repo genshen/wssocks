@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
-	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -41,8 +40,7 @@ func NewWebSocketClient(dialer *websocket.Dialer, addr string, header http.Heade
 }
 
 // create a new proxy with unique id
-func (wsc *WebSocketClient) NewProxy(conn io.ReadWriteCloser, server chan ServerData,
-	close chan bool, cherr chan error) *ProxyClient {
+func (wsc *WebSocketClient) NewProxy(server chan ServerData, close chan bool, cherr chan error) *ProxyClient {
 	id := ksuid.New()
 	proxy := ProxyClient{Id: id, server: server, close: close, cherr: cherr}
 
@@ -121,7 +119,7 @@ func (wsc *WebSocketClient) ListenIncomeMsg() error {
 						continue
 					} else {
 						// just write data back
-						proxy.server <- ServerData{Type: proxyData.Type, Data: decodeBytes}
+						proxy.server <- ServerData{Tag: proxyData.Tag, Data: decodeBytes}
 					}
 				}
 			}
