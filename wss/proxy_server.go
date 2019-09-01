@@ -1,14 +1,18 @@
 package wss
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -141,11 +145,16 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 		go func() {
 			// todo size is only one client's size.
 			log.WithField("size", s.GetConnectorSize()+1).Trace("connection size changed.")
-			log.WithField("address", proxyEstMsg.Addr).Trace("proxy connecting to remote")
-			if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr, estData); err != nil {
-				log.Error(err) // todo error handle better way
+			log.WithField("address", proxyEstMsg.Addr).Trace("proxy connected to remote")
+			if proxyEstMsg.Type == ProxyTypeHttp {
+				if err := s.establishHttp(id, proxyEstMsg.Type, proxyEstMsg.Addr, estData); err != nil {
+					log.Error(err) // todo error handle better way
+				}
+			} else {
+				if err := s.establish(id, proxyEstMsg.Type, proxyEstMsg.Addr, estData); err != nil {
+					log.Error(err) // todo error handle better way
+				}
 			}
-			log.WithField("address", proxyEstMsg.Addr).Trace("disconnected to remote")
 			log.WithField("size", s.GetConnectorSize()).Trace("connection size changed.")
 			s.tellClosed(id) // tell client to close connection.
 		}()
@@ -188,17 +197,11 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 
 	switch proxyType {
 	case ProxyTypeSocks5:
-		if err := s.WriteProxyMessage(id, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
+		if err := s.WriteProxyMessage(id, TagData, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 			return err
 		}
-	case ProxyTypeHttp:
-		if data != nil {
-			if _, err := tcpConn.Write(data); err != nil {
-				return err
-			}
-		}
 	case ProxyTypeHttps:
-		if err := s.WriteProxyMessage(id, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: Pyx\r\n\r\n")); err != nil {
+		if err := s.WriteProxyMessage(id, TagData, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: Pyx\r\n\r\n")); err != nil {
 			return err
 		}
 	}
@@ -225,4 +228,99 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 			}
 		}
 	}
+}
+
+func (s *ServerWS) establishHttp(id ksuid.KSUID, proxyType int, addr string, header []byte) error {
+	if header == nil {
+		_ = s.tellClosed(id)
+		_ = s.WriteProxyMessage(id, TagEstErr, nil)
+		return errors.New("http header empty")
+	}
+
+	closed := make(chan bool)
+	client := make(chan ClientData, 2) // for http at most 2 data buffers are needed(http body, TagNoMore tag).
+	defer close(closed)
+	defer close(client)
+
+	bodyReadCloser := NewHttpProxyBody(closed, client)
+	proxy := s.AddConn(id, client, closed)
+	defer s.RemoveProxy(id)
+	defer func() {
+		if !bodyReadCloser.isClosed() { // if it is not closed by client.
+			_ = s.tellClosed(id)
+		}
+	}()
+
+	if err := s.WriteProxyMessage(id, TagEstOk, nil); err != nil {
+		return err
+	}
+
+	// get http request by header bytes.
+	bufferHeader := bufio.NewReader(bytes.NewBuffer(header))
+	req, err := http.ReadRequest(bufferHeader)
+	if err != nil {
+		return err
+	}
+	req.Body = bodyReadCloser
+
+	// read request and copy response back
+	resp, err := http.DefaultTransport.RoundTrip(req)
+	if err != nil {
+		return errors.New(fmt.Sprintf("transport error: %s", err))
+	}
+	defer resp.Body.Close()
+
+	writer := WebSocketWriter{WSC: &s.ConcurrentWebSocket, Id: proxy.Id}
+	var headerBuffer bytes.Buffer
+	HttpRespHeader(&headerBuffer, resp)
+	writer.Write(headerBuffer.Bytes())
+	if _, err := io.Copy(&writer, resp.Body); err != nil {
+		return errors.New(fmt.Sprintf("http body copy error: %s", err))
+	}
+	return nil
+}
+
+type HttpProxyBody struct {
+	closed  chan bool
+	data    chan ClientData
+	done    bool
+	closeCh bool
+}
+
+func (b *HttpProxyBody) Read(p []byte) (int, error) {
+	if b.done {
+		return 0, io.EOF
+	}
+
+	select {
+	case client := <-b.data: // data received from client
+		if client.Tag == TagNoMore {
+			b.done = true
+		}
+		for i, b := range client.Data {
+			p[i] = b
+		}
+		return len(client.Data), nil
+	case <-b.closed:
+		b.done = true
+		b.closeCh = true
+		return 0, io.EOF
+	}
+}
+
+func (b *HttpProxyBody) Close() error {
+	b.done = true
+	// fixme add a chan to close select if not finished.
+	return nil
+}
+
+func (b *HttpProxyBody) isClosed() bool {
+	return b.done
+}
+func (b *HttpProxyBody) isClosedInCh() bool {
+	return b.closeCh
+}
+
+func NewHttpProxyBody(closed chan bool, data chan ClientData) *HttpProxyBody {
+	return &HttpProxyBody{closed: closed, data: data, done: false, closeCh: false}
 }

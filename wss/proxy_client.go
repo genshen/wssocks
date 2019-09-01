@@ -7,6 +7,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	TagData = iota
+	TagEstOk
+	TagEstErr
+	TagNoMore
+)
+
 // proxy client handle one connection, send data to proxy server vai websocket.
 type ProxyClient struct {
 	Id       ksuid.KSUID

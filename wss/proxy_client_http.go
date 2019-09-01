@@ -27,26 +27,22 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		err  error
 	}
 	done := make(chan Done, 2)
-	// defer close(done)
+	continued := make(chan int)
+	defer close(continued)
+
+	hj, _ := w.(http.Hijacker)
+	conn, jack, _ := hj.Hijack()
+	defer conn.Close()
+	defer jack.Flush()
 
 	proxy := client.wsc.NewProxy(nil, nil, nil)
 	proxy.onData = func(id ksuid.KSUID, data ServerData) {
-		reader := bufio.NewReader(bytes.NewBuffer(data.Data))
-		// todo multiple parts.
-		if newResp, err := http.ReadResponse(reader, req); err != nil {
+		if data.Tag == TagEstOk || data.Tag == TagEstErr {
+			continued <- data.Tag
+			return
+		}
+		if _, err := jack.Write(data.Data); err != nil {
 			done <- Done{true, err}
-		} else {
-			copyHeaders(w.Header(), newResp.Header)
-			w.WriteHeader(newResp.StatusCode)
-			if _, err := io.Copy(w, newResp.Body); err != nil {
-				log.Error("err2")
-				done <- Done{true, err}
-			}
-			if err := newResp.Body.Close(); err != nil {
-				log.Error("err3")
-				done <- Done{true, err}
-			}
-			done <- Done{true, nil} // close http connection (todo multiple parts.)
 		}
 	}
 	proxy.onClosed = func(id ksuid.KSUID, tell bool) {
@@ -65,12 +61,8 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var headerBuffer bytes.Buffer
-	host, path := client.parseUrl(req.Method, req.Proto, req.URL)
-	headerBuffer.WriteString(fmt.Sprintf("%s %s %s\r\n", req.Method, path, req.Proto))
-	for k, v := range req.Header {
-		headerBuffer.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
-	}
-	headerBuffer.WriteString("\r\n")
+	host, _ := client.parseUrl(req.Method, req.Proto, req.URL)
+	HttpRequestHeader(&headerBuffer, req)
 
 	if err := proxy.Establish(nil, client.wsc, headerBuffer.Bytes(), ProxyTypeHttp, host); err != nil { // fixme default port
 		log.Error("write header error:", err)
@@ -80,7 +72,14 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
-	// copy body data
+
+	// fixme add timeout
+	// wait receiving "established connection" from server
+	if tag := <-continued; tag == TagEstErr {
+		return
+	}
+
+	// copy request body data
 	writer := WebSocketWriter{WSC: &client.wsc.ConcurrentWebSocket, Id: proxy.Id}
 	if _, err := io.Copy(&writer, req.Body); err != nil {
 		log.Error("write body error:", err)
@@ -90,9 +89,17 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
+	if err := client.wsc.WriteProxyMessage(proxy.Id, TagNoMore, nil); err != nil {
+		log.Error("write body error:", err)
+		client.wsc.RemoveProxy(proxy.Id)
+		if err := client.wsc.TellClose(proxy.Id); err != nil {
+			log.Error("close error", err)
+		}
+		return
+	}
 
 	// finished
-	d := <-done
+	d := <-done // fixme add timeout
 	client.wsc.RemoveProxy(proxy.Id)
 	if d.tell {
 		if err := client.wsc.TellClose(proxy.Id); err != nil {
@@ -130,8 +137,8 @@ func (client *HttpClient) parseUrl(method, ver string, u *url.URL) (string, stri
 		}
 	}
 	// get path?query#fragment
-	u.Host = ""
-	u.Scheme = ""
+	//u.Host = ""
+	//u.Scheme = ""
 	return host, u.String()
 }
 
