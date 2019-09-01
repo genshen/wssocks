@@ -5,6 +5,7 @@ import (
 	"flag"
 	"github.com/genshen/cmds"
 	"github.com/genshen/wssocks/wss"
+	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -124,10 +125,15 @@ func (c *client) Run() error {
 		}
 	}()
 
+	plog := term_view.NewPLog()
+	log.SetOutput(plog) // change log stdout to plog
+
 	// http listening
 	if c.http {
+		log.WithField("http listen address", c.httpAddr).
+			Info("listening on local address for incoming proxy requests.")
 		go func() {
-			handle := wss.NewHttpProxy(wsc);
+			handle := wss.NewHttpProxy(wsc, plog);
 			if err := http.ListenAndServe(c.httpAddr, &handle); err != nil {
 				log.Fatalln(err)
 			}
@@ -135,7 +141,16 @@ func (c *client) Run() error {
 	}
 
 	// start listen for socks5 and https connection.
-	if err := wss.ListenAndServe(wsc, c.address, c.http); err != nil {
+	if err := wss.ListenAndServe(plog, wsc, c.address, c.http, func() {
+		if c.http {
+			log.WithField("socks5 listen address", c.address).
+				WithField("https listen address", c.address).
+				Info("listening on local address for incoming proxy requests.")
+		} else {
+			log.WithField("socks5 listen address", c.address).
+				Info("listening on local address for incoming proxy requests.")
+		}
+	}); err != nil {
 		return err
 	}
 	return nil

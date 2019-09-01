@@ -2,7 +2,6 @@ package wss
 
 import (
 	"encoding/base64"
-	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 )
@@ -29,8 +28,7 @@ type ServerData struct {
 
 // handel socket dial results processing
 // copy income connection data to proxy serve via websocket
-func (p *ProxyClient) Establish(plog *term_view.ProgressLog, wsc *WebSocketClient,
-	firstSendData []byte, proxyType int, addr string) error {
+func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, proxyType int, addr string) error {
 	estMsg := ProxyEstMessage{
 		Type:     proxyType,
 		Addr:     addr,

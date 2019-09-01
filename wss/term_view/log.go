@@ -12,7 +12,9 @@ import (
 type Status struct {
 	Address string
 	IsNew   bool
+	Type    int
 }
+
 type ProgressLog struct {
 	ConnSize uint            // size of current connections
 	Address  map[string]uint // current requests as well as its count

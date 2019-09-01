@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -13,12 +14,12 @@ import (
 )
 
 type HttpClient struct {
-	wsc *WebSocketClient
-	//log *term_view.ProgressLog
+	wsc  *WebSocketClient
+	plog *term_view.ProgressLog
 }
 
-func NewHttpProxy(wsc *WebSocketClient) HttpClient {
-	return HttpClient{wsc: wsc}
+func NewHttpProxy(wsc *WebSocketClient, plog *term_view.ProgressLog) HttpClient {
+	return HttpClient{wsc: wsc, plog: plog}
 }
 
 func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -55,16 +56,19 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// establish with header fixme plog
 	if !req.URL.IsAbs() {
 		client.wsc.RemoveProxy(proxy.Id)
-		w.WriteHeader(404)
+		w.WriteHeader(403)
 		_, _ = w.Write([]byte("This is a proxy server. Does not respond to non-proxy requests."))
 		return
 	}
+
+	client.plog.Update(term_view.Status{IsNew: true, Address: req.URL.Host, Type: ProxyTypeHttp})
+	defer client.plog.Update(term_view.Status{IsNew: false, Address: req.URL.Host, Type: ProxyTypeHttp})
 
 	var headerBuffer bytes.Buffer
 	host, _ := client.parseUrl(req.Method, req.Proto, req.URL)
 	HttpRequestHeader(&headerBuffer, req)
 
-	if err := proxy.Establish(nil, client.wsc, headerBuffer.Bytes(), ProxyTypeHttp, host); err != nil { // fixme default port
+	if err := proxy.Establish(client.wsc, headerBuffer.Bytes(), ProxyTypeHttp, host); err != nil { // fixme default port
 		log.Error("write header error:", err)
 		client.wsc.RemoveProxy(proxy.Id)
 		if err := client.wsc.TellClose(proxy.Id); err != nil {

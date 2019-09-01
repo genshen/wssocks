@@ -67,16 +67,13 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool,
 }
 
 // listen on local address:port and forward socks5 requests to wssocks server.
-func ListenAndServe(wsc *WebSocketClient, address string, enableHttp bool) error {
+func ListenAndServe(plog *term_view.ProgressLog, wsc *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
 	s, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
-	log.WithField("local address", address).Info("listening on local address for incoming proxy requests.")
 
-	plog := term_view.NewPLog()
-	log.SetOutput(plog) // change log stdout to plog
-
+	onConnected()
 	var client Client
 	for {
 		c, err := s.Accept()
@@ -88,8 +85,8 @@ func ListenAndServe(wsc *WebSocketClient, address string, enableHttp bool) error
 			err := client.Reply(c, enableHttp, func(conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
 				defer conn.Close()
 
-				plog.Update(term_view.Status{IsNew: true, Address: addr})
-				defer plog.Update(term_view.Status{IsNew: false, Address: addr})
+				plog.Update(term_view.Status{IsNew: true, Address: addr, Type: proxyType})
+				defer plog.Update(term_view.Status{IsNew: false, Address: addr, Type: proxyType})
 
 				type Done struct {
 					tell bool
@@ -112,7 +109,7 @@ func ListenAndServe(wsc *WebSocketClient, address string, enableHttp bool) error
 				})
 
 				// tell server to establish connection
-				if err := proxy.Establish(plog, wsc, firstSendData, proxyType, addr); err != nil {
+				if err := proxy.Establish(wsc, firstSendData, proxyType, addr); err != nil {
 					wsc.RemoveProxy(proxy.Id)
 					if err := wsc.TellClose(proxy.Id); err != nil {
 						log.Error("close error", err)
