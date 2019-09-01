@@ -40,9 +40,10 @@ func NewWebSocketClient(dialer *websocket.Dialer, addr string, header http.Heade
 }
 
 // create a new proxy with unique id
-func (wsc *WebSocketClient) NewProxy(server chan ServerData, close chan bool, cherr chan error) *ProxyClient {
+func (wsc *WebSocketClient) NewProxy(onData func(ksuid.KSUID, ServerData),
+	onClosed func(ksuid.KSUID, bool), onError func(ksuid.KSUID, error)) *ProxyClient {
 	id := ksuid.New()
-	proxy := ProxyClient{Id: id, server: server, close: close, cherr: cherr}
+	proxy := ProxyClient{Id: id, onData: onData, onClosed: onClosed, onError: onError}
 
 	wsc.proxyMu.Lock()
 	defer wsc.proxyMu.Unlock()
@@ -107,19 +108,19 @@ func (wsc *WebSocketClient) ListenIncomeMsg() error {
 				// now, we known the id and type of incoming data
 				switch socketStream.Type {
 				case WsTpClose: // remove proxy
-					proxy.close <- false
+					proxy.onClosed(ksid, false)
 				case WsTpData:
 					var proxyData ProxyData
 					if err := json.Unmarshal(socketData, &proxyData); err != nil {
-						proxy.cherr <- err
+						proxy.onError(ksid, err)
 						continue
 					}
 					if decodeBytes, err := base64.StdEncoding.DecodeString(proxyData.DataBase64); err != nil {
-						proxy.cherr <- err
+						proxy.onError(ksid, err)
 						continue
 					} else {
 						// just write data back
-						proxy.server <- ServerData{Tag: proxyData.Tag, Data: decodeBytes}
+						proxy.onData(ksid, ServerData{Tag: proxyData.Tag, Data: decodeBytes})
 					}
 				}
 			}

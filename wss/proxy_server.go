@@ -177,9 +177,9 @@ func (s *ServerWS) establish(id ksuid.KSUID, proxyType int, addr string, data []
 	}
 	defer tcpConn.Close()
 
-	closed := make(chan bool)
+	closed := make(chan bool, 2)
 	client := make(chan ClientData)
-	defer close(closed)
+	//defer close(closed)
 	defer close(client)
 
 	// todo check exists

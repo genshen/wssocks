@@ -10,13 +10,13 @@ import (
 // proxy client handle one connection, send data to proxy server vai websocket.
 type ProxyClient struct {
 	Id       ksuid.KSUID
-	server   chan ServerData // data from server todo data with  type
-	close    chan bool       // close connection by this channel
-	cherr    chan error      // error message
+	onData   func(ksuid.KSUID, ServerData) // data from server todo data with  type
+	onClosed func(ksuid.KSUID, bool)       // close connection, param bool: do tellClose if true
+	onError  func(ksuid.KSUID, error)      // if there are error messages
 }
 
 type ServerData struct {
-	Tag int
+	Tag  int
 	Data []byte
 }
 
