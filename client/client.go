@@ -75,7 +75,7 @@ func (c *client) Run() error {
 	wsHeader := make(http.Header) // header in websocket request(default is nil)
 
 	// loading and execute plugin
-	if clientPlugin.HasPlugin() {
+	if clientPlugin.HasRedirectPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
 		if err := clientPlugin.RedirectPlugin.BeforeRequest(dialer, c.remoteUrl, wsHeader); err != nil {
 			return err
@@ -96,20 +96,26 @@ func (c *client) Run() error {
 	if version, err := wss.ExchangeVersion(wsc.WsConn); err != nil {
 		return err
 	} else {
-		log.WithFields(log.Fields{
-			"compatible version code": version.CompVersion,
-			"version code":            version.VersionCode,
-			"version number":          version.Version,
-		}).Info("server version")
-
-		if version.CompVersion > wss.VersionCode || wss.VersionCode > version.VersionCode {
-			return errors.New("incompatible protocol version of client and server")
-		}
-		if version.Version != wss.CoreVersion {
+		if clientPlugin.HasVersionPlugin() {
+			if err := clientPlugin.VersionPlugin.OnServerVersion(version); err != nil {
+				return err
+			}
+		} else {
 			log.WithFields(log.Fields{
-				"client wssocks version": wss.CoreVersion,
-				"server wssocks version": version.Version,
-			}).Warning("different version of client and server wssocks")
+				"compatible version code": version.CompVersion,
+				"version code":            version.VersionCode,
+				"version number":          version.Version,
+			}).Info("server version")
+
+			if version.CompVersion > wss.VersionCode || wss.VersionCode > version.VersionCode {
+				return errors.New("incompatible protocol version of client and server")
+			}
+			if version.Version != wss.CoreVersion {
+				log.WithFields(log.Fields{
+					"client wssocks version": wss.CoreVersion,
+					"server wssocks version": version.Version,
+				}).Warning("different version of client and server wssocks")
+			}
 		}
 	}
 
