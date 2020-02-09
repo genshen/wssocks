@@ -2,7 +2,6 @@ package wss
 
 import (
 	"errors"
-	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -67,7 +66,7 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool,
 }
 
 // listen on local address:port and forward socks5 requests to wssocks server.
-func ListenAndServe(plog *term_view.ProgressLog, wsc *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
+func ListenAndServe(record *ConnRecord, wsc *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
 	s, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -85,8 +84,8 @@ func ListenAndServe(plog *term_view.ProgressLog, wsc *WebSocketClient, address s
 			err := client.Reply(c, enableHttp, func(conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
 				defer conn.Close()
 
-				plog.Update(term_view.Status{IsNew: true, Address: addr, Type: proxyType})
-				defer plog.Update(term_view.Status{IsNew: false, Address: addr, Type: proxyType})
+				record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
+				defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
 
 				type Done struct {
 					tell bool

@@ -132,15 +132,22 @@ func (c *client) Run() error {
 		}
 	}()
 
-	plog := term_view.NewPLog()
+	record := wss.NewConnRecord()
+	plog := term_view.NewPLog(record)
 	log.SetOutput(plog) // change log stdout to plog
+
+	record.OnChange = func() {
+		// update log
+		plog.SetLogBuffer(record) // call Writer.Write() to set log data into buffer
+		plog.Writer.Flush(nil)    // flush buffer
+	}
 
 	// http listening
 	if c.http {
 		log.WithField("http listen address", c.httpAddr).
 			Info("listening on local address for incoming proxy requests.")
 		go func() {
-			handle := wss.NewHttpProxy(wsc, plog);
+			handle := wss.NewHttpProxy(wsc, record)
 			if err := http.ListenAndServe(c.httpAddr, &handle); err != nil {
 				log.Fatalln(err)
 			}
@@ -148,7 +155,7 @@ func (c *client) Run() error {
 	}
 
 	// start listen for socks5 and https connection.
-	if err := wss.ListenAndServe(plog, wsc, c.address, c.http, func() {
+	if err := wss.ListenAndServe(record, wsc, c.address, c.http, func() {
 		if c.http {
 			log.WithField("socks5 listen address", c.address).
 				WithField("https listen address", c.address).

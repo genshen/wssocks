@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -14,12 +13,12 @@ import (
 )
 
 type HttpClient struct {
-	wsc  *WebSocketClient
-	plog *term_view.ProgressLog
+	wsc    *WebSocketClient
+	record *ConnRecord
 }
 
-func NewHttpProxy(wsc *WebSocketClient, plog *term_view.ProgressLog) HttpClient {
-	return HttpClient{wsc: wsc, plog: plog}
+func NewHttpProxy(wsc *WebSocketClient, plog *ConnRecord) HttpClient {
+	return HttpClient{wsc: wsc, record: plog}
 }
 
 func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -53,7 +52,7 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		done <- Done{true, err}
 	}
 
-	// establish with header fixme plog
+	// establish with header fixme record
 	if !req.URL.IsAbs() {
 		client.wsc.RemoveProxy(proxy.Id)
 		w.WriteHeader(403)
@@ -61,8 +60,8 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	client.plog.Update(term_view.Status{IsNew: true, Address: req.URL.Host, Type: ProxyTypeHttp})
-	defer client.plog.Update(term_view.Status{IsNew: false, Address: req.URL.Host, Type: ProxyTypeHttp})
+	client.record.Update(ConnStatus{IsNew: true, Address: req.URL.Host, Type: ProxyTypeHttp})
+	defer client.record.Update(ConnStatus{IsNew: false, Address: req.URL.Host, Type: ProxyTypeHttp})
 
 	var headerBuffer bytes.Buffer
 	host, _ := client.parseUrl(req.Method, req.Proto, req.URL)
