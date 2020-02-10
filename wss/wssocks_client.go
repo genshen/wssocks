@@ -6,15 +6,17 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
+	"sync"
 )
 
 var StoppedError = errors.New("listener stopped")
 
 // client part of wssocks
 type Client struct {
-	tcpl   *net.TCPListener
-	stop   chan interface{}
-	closed bool
+	tcpl    *net.TCPListener
+	stop    chan interface{}
+	closed  bool
+	wgClose sync.WaitGroup // wait for closing
 }
 
 func NewClient() *Client {
@@ -107,6 +109,8 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 		go func() {
 			err := client.Reply(c, enableHttp, func(conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
 				defer conn.Close()
+				client.wgClose.Add(1)
+				defer client.wgClose.Done()
 
 				record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
 				defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
@@ -168,11 +172,17 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 	}
 }
 
-func (client *Client) Close() error {
+// Close stops listening on the TCP address,
+// But the active links are not closed and wait them to finish.
+func (client *Client) Close(wait bool) error {
 	if client.closed {
 		return nil
 	}
 	close(client.stop)
 	client.closed = true
-	return client.tcpl.Close()
+	err := client.tcpl.Close()
+	if wait {
+		client.wgClose.Wait() // wait the active connection to finish
+	}
+	return err
 }

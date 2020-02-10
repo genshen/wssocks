@@ -11,6 +11,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"sync"
 )
 
@@ -137,10 +139,8 @@ func (c *client) Run() error {
 
 	// stop all connections or tasks, if one of tasks is finished.
 	closeAll := func() {
-		log.Infoln("stopping")
-
 		if hdl.cl != nil {
-			hdl.cl.Close()
+			hdl.cl.Close(false)
 		}
 		if hdl.httpServer != nil {
 			hdl.httpServer.Shutdown(context.TODO())
@@ -164,8 +164,8 @@ func (c *client) Run() error {
 	// send heart beats.
 	hdl.hb = wss.NewHeartBeat(wsc)
 	go func() {
-		defer wg.Done()
 		defer once.Do(closeAll)
+		defer wg.Done()
 		if err := hdl.hb.Start(); err != nil {
 			log.Info("heartbeat ending", err)
 		}
@@ -187,8 +187,8 @@ func (c *client) Run() error {
 		log.WithField("http listen address", c.httpAddr).
 			Info("listening on local address for incoming proxy requests.")
 		go func() {
-			defer wg.Done()
 			defer once.Do(closeAll)
+			defer wg.Done()
 			handle := wss.NewHttpProxy(wsc, record)
 			hdl.httpServer = &http.Server{Addr: c.httpAddr, Handler: &handle}
 			if err := hdl.httpServer.ListenAndServe(); err != nil {
@@ -200,8 +200,8 @@ func (c *client) Run() error {
 	// start listen for socks5 and https connection.
 	hdl.cl = wss.NewClient()
 	go func() {
-		defer wg.Done()
 		defer once.Do(closeAll)
+		defer wg.Done()
 		if err := hdl.cl.ListenAndServe(record, wsc, c.address, c.http, func() {
 			if c.http {
 				log.WithField("socks5 listen address", c.address).
@@ -212,10 +212,48 @@ func (c *client) Run() error {
 					Info("listening on local address for incoming proxy requests.")
 			}
 		}); err != nil {
-			log.Fatalln(err)
+			log.Errorln(err)
+		}
+	}()
+
+	go func() {
+		firstInterrupt := true
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt)
+		for { // accept multiple signal
+			select {
+			case <-c:
+				if firstInterrupt {
+					log.Println("press CTRL+C to force exit")
+					firstInterrupt = false
+					go func() {
+						// stop tasks in signal
+						once.Do(func() {
+							if hdl.cl != nil {
+								hdl.cl.Close(true)
+							}
+							if hdl.httpServer != nil {
+								hdl.httpServer.Shutdown(context.TODO())
+							}
+							if hdl.hb != nil {
+								hdl.hb.Close()
+							}
+							if hdl.wsc != nil {
+								hdl.wsc.Close()
+							}
+						})
+					}()
+				} else {
+					os.Exit(0)
+				}
+			}
 		}
 	}()
 
 	wg.Wait() // wait all tasks finished
+	// about exit: 1. press ctrl+c, it will wait active connection to finish.
+	// 2. press twice, force exit.
+	// 3. one of tasks error, exit immediately.
+	// 4. close server, then client exit (the same as 3).
 	return nil
 }
