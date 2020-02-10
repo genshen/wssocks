@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"github.com/genshen/cmds"
@@ -45,6 +46,13 @@ type client struct {
 	remote    string   // string usr of server
 	remoteUrl *url.URL // url of server
 	//	remoteHeader http.Header
+}
+
+type Handles struct {
+	wsc        *wss.WebSocketClient
+	hb         *wss.HeartBeat
+	httpServer *http.Server
+	cl         *wss.Client
 }
 
 func (c *client) PreRun() error {
@@ -120,20 +128,45 @@ func (c *client) Run() error {
 		}
 	}
 
+	var hdl Handles
+	hdl.wsc = wsc
+
 	var wg sync.WaitGroup
-	wg.Add(3) // 3 go func
+	var once sync.Once // wait for one of go func
+	wg.Add(3)          // wait for all go func
+
+	// stop all connections or tasks, if one of tasks is finished.
+	closeAll := func() {
+		log.Infoln("stopping")
+
+		if hdl.cl != nil {
+			hdl.cl.Close()
+		}
+		if hdl.httpServer != nil {
+			hdl.httpServer.Shutdown(context.TODO())
+		}
+		if hdl.hb != nil {
+			hdl.hb.Close()
+		}
+		if hdl.wsc != nil {
+			hdl.wsc.Close()
+		}
+	}
+
 	// start websocket message listen.
 	go func() {
+		defer once.Do(closeAll)
 		defer wg.Done()
 		if err := wsc.ListenIncomeMsg(); err != nil {
 			log.Error("error websocket read:", err)
 		}
 	}()
 	// send heart beats.
-	hb := wss.NewHeartBeat(wsc)
+	hdl.hb = wss.NewHeartBeat(wsc)
 	go func() {
 		defer wg.Done()
-		if err := hb.Start(); err != nil {
+		defer once.Do(closeAll)
+		if err := hdl.hb.Start(); err != nil {
 			log.Info("heartbeat ending", err)
 		}
 	}()
@@ -155,19 +188,21 @@ func (c *client) Run() error {
 			Info("listening on local address for incoming proxy requests.")
 		go func() {
 			defer wg.Done()
+			defer once.Do(closeAll)
 			handle := wss.NewHttpProxy(wsc, record)
-			server := http.Server{Addr: c.httpAddr, Handler: &handle}
-			if err := server.ListenAndServe(); err != nil {
+			hdl.httpServer = &http.Server{Addr: c.httpAddr, Handler: &handle}
+			if err := hdl.httpServer.ListenAndServe(); err != nil {
 				log.Fatalln(err)
 			}
 		}()
 	}
 
 	// start listen for socks5 and https connection.
-	cl := wss.NewClient()
+	hdl.cl = wss.NewClient()
 	go func() {
 		defer wg.Done()
-		if err := cl.ListenAndServe(record, wsc, c.address, c.http, func() {
+		defer once.Do(closeAll)
+		if err := hdl.cl.ListenAndServe(record, wsc, c.address, c.http, func() {
 			if c.http {
 				log.WithField("socks5 listen address", c.address).
 					WithField("https listen address", c.address).
@@ -181,6 +216,6 @@ func (c *client) Run() error {
 		}
 	}()
 
-	wg.Wait()
+	wg.Wait() // wait all tasks finished
 	return nil
 }

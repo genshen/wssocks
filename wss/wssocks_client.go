@@ -12,6 +12,7 @@ var StoppedError = errors.New("listener stopped")
 
 // client part of wssocks
 type Client struct {
+	tcpl   *net.TCPListener
 	stop   chan interface{}
 	closed bool
 }
@@ -78,10 +79,15 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool,
 
 // listen on local address:port and forward socks5 requests to wssocks server.
 func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
-	s, err := net.Listen("tcp", address)
+	netListener, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
+	tcpl, ok := (netListener).(*net.TCPListener)
+	if !ok {
+		return errors.New("not a tcp listener")
+	}
+	client.tcpl = tcpl
 
 	onConnected()
 	for {
@@ -93,7 +99,7 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 			// if the channel is still open, continue as normal
 		}
 
-		c, err := s.Accept()
+		c, err := tcpl.Accept()
 		if err != nil {
 			return err
 		}
@@ -162,10 +168,11 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 	}
 }
 
-func (client *Client) Close() {
+func (client *Client) Close() error {
 	if client.closed {
-		return
+		return nil
 	}
 	close(client.stop)
 	client.closed = true
+	return client.tcpl.Close()
 }
