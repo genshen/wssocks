@@ -7,7 +7,6 @@ import (
 	"github.com/segmentio/ksuid"
 	"net/http"
 	"sync"
-	"time"
 )
 
 // WebSocketClient is a collection of proxy clients.
@@ -17,6 +16,7 @@ type WebSocketClient struct {
 	ConcurrentWebSocket
 	proxies map[ksuid.KSUID]*ProxyClient // all proxies on this websocket.
 	proxyMu sync.RWMutex                 // mutex to operate proxies map.
+	stop    chan interface{}
 }
 
 // get the connection size
@@ -36,6 +36,7 @@ func NewWebSocketClient(dialer *websocket.Dialer, addr string, header http.Heade
 	}
 	wsc.WsConn = ws
 	wsc.proxies = make(map[ksuid.KSUID]*ProxyClient)
+	wsc.stop = make(chan interface{})
 	return &wsc, nil
 }
 
@@ -87,6 +88,14 @@ func (wsc *WebSocketClient) RemoveProxy(id ksuid.KSUID) {
 // listen income websocket messages and dispatch to different proxies.
 func (wsc *WebSocketClient) ListenIncomeMsg() error {
 	for {
+		// check stop first
+		select {
+		case <-wsc.stop:
+			return StoppedError
+		default:
+			// if the channel is still open, continue as normal
+		}
+
 		_, data, err := wsc.WsConn.ReadMessage()
 		if err != nil {
 			// todo close all
@@ -128,22 +137,10 @@ func (wsc *WebSocketClient) ListenIncomeMsg() error {
 	}
 }
 
-// start sending heart beat to server.
-func (wsc *WebSocketClient) HeartBeat() error {
-	t := time.NewTicker(time.Second * 15)
-	defer t.Stop()
-	for {
-		select {
-		case <-t.C:
-			heartBeats := WebSocketMessage{
-				Id:   ksuid.KSUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.String(),
-				Type: WsTpBeats,
-				Data: nil,
-			}
-			if err := wsc.WriteWSJSON(heartBeats); err != nil {
-				return err
-			}
-		}
+func (wsc *WebSocketClient) Close() error {
+	close(wsc.stop)
+	if err := wsc.WSClose(); err != nil {
+		return err
 	}
 	return nil
 }

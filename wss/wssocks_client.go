@@ -8,8 +8,19 @@ import (
 	"net"
 )
 
+var StoppedError = errors.New("listener stopped")
+
 // client part of wssocks
 type Client struct {
+	stop   chan interface{}
+	closed bool
+}
+
+func NewClient() *Client {
+	var client Client
+	client.closed = false
+	client.stop = make(chan interface{})
+	return &client
 }
 
 // response to socks5 client and start to exchange data between socks5 client and
@@ -66,15 +77,22 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool,
 }
 
 // listen on local address:port and forward socks5 requests to wssocks server.
-func ListenAndServe(record *ConnRecord, wsc *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
+func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
 	s, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
 
 	onConnected()
-	var client Client
 	for {
+		// check stop first
+		select {
+		case <-client.stop:
+			return StoppedError
+		default:
+			// if the channel is still open, continue as normal
+		}
+
 		c, err := s.Accept()
 		if err != nil {
 			return err
@@ -142,4 +160,12 @@ func ListenAndServe(record *ConnRecord, wsc *WebSocketClient, address string, en
 			}
 		}()
 	}
+}
+
+func (client *Client) Close() {
+	if client.closed {
+		return
+	}
+	close(client.stop)
+	client.closed = true
 }

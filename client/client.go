@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
+	"sync"
 )
 
 const CommandNameClient = "client"
@@ -119,15 +120,20 @@ func (c *client) Run() error {
 		}
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(3) // 3 go func
 	// start websocket message listen.
 	go func() {
+		defer wg.Done()
 		if err := wsc.ListenIncomeMsg(); err != nil {
 			log.Error("error websocket read:", err)
 		}
 	}()
 	// send heart beats.
+	hb := wss.NewHeartBeat(wsc)
 	go func() {
-		if err := wsc.HeartBeat(); err != nil {
+		defer wg.Done()
+		if err := hb.Start(); err != nil {
 			log.Info("heartbeat ending", err)
 		}
 	}()
@@ -144,28 +150,37 @@ func (c *client) Run() error {
 
 	// http listening
 	if c.http {
+		wg.Add(1)
 		log.WithField("http listen address", c.httpAddr).
 			Info("listening on local address for incoming proxy requests.")
 		go func() {
+			defer wg.Done()
 			handle := wss.NewHttpProxy(wsc, record)
-			if err := http.ListenAndServe(c.httpAddr, &handle); err != nil {
+			server := http.Server{Addr: c.httpAddr, Handler: &handle}
+			if err := server.ListenAndServe(); err != nil {
 				log.Fatalln(err)
 			}
 		}()
 	}
 
 	// start listen for socks5 and https connection.
-	if err := wss.ListenAndServe(record, wsc, c.address, c.http, func() {
-		if c.http {
-			log.WithField("socks5 listen address", c.address).
-				WithField("https listen address", c.address).
-				Info("listening on local address for incoming proxy requests.")
-		} else {
-			log.WithField("socks5 listen address", c.address).
-				Info("listening on local address for incoming proxy requests.")
+	cl := wss.NewClient()
+	go func() {
+		defer wg.Done()
+		if err := cl.ListenAndServe(record, wsc, c.address, c.http, func() {
+			if c.http {
+				log.WithField("socks5 listen address", c.address).
+					WithField("https listen address", c.address).
+					Info("listening on local address for incoming proxy requests.")
+			} else {
+				log.WithField("socks5 listen address", c.address).
+					Info("listening on local address for incoming proxy requests.")
+			}
+		}); err != nil {
+			log.Fatalln(err)
 		}
-	}); err != nil {
-		return err
-	}
+	}()
+
+	wg.Wait()
 	return nil
 }
