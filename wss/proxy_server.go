@@ -109,7 +109,7 @@ func (s *ServerWS) dispatchMessage(data []byte, config WebsocksServerConfig) err
 	}
 
 	// parsing id
-	id, err := ksuid.Parse(socketStream.Id);
+	id, err := ksuid.Parse(socketStream.Id)
 	if err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ func (s *ServerWS) establishHttp(id ksuid.KSUID, proxyType int, addr string, hea
 	// read request and copy response back
 	resp, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
-		return errors.New(fmt.Sprintf("transport error: %s", err))
+		return fmt.Errorf("transport error: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -284,7 +284,7 @@ func (s *ServerWS) establishHttp(id ksuid.KSUID, proxyType int, addr string, hea
 	HttpRespHeader(&headerBuffer, resp)
 	writer.Write(headerBuffer.Bytes())
 	if _, err := io.Copy(&writer, resp.Body); err != nil {
-		return errors.New(fmt.Sprintf("http body copy error: %s", err))
+		return fmt.Errorf("http body copy error: %w", err)
 	}
 	return nil
 }
