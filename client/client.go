@@ -192,7 +192,7 @@ func (c *client) Run() error {
 			handle := wss.NewHttpProxy(wsc, record)
 			hdl.httpServer = &http.Server{Addr: c.httpAddr, Handler: &handle}
 			if err := hdl.httpServer.ListenAndServe(); err != nil {
-				log.Fatalln(err)
+				log.Errorln(err)
 			}
 		}()
 	}
