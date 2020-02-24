@@ -1,6 +1,6 @@
 # build method: just run `docker build --rm --build-arg -t genshen/wssocks .`
 
-FROM golang:1.12.4-alpine AS builder
+FROM golang:1.13.8-alpine AS builder
 
 # set to 'on' if using go module
 ENV GO111MODULE=on
