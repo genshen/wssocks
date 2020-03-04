@@ -4,10 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/genshen/cmds"
-	"github.com/DefinitlyEvil/wssocks/wss"
+	"github.com/genshen/wssocks/wss"
 )
 
-const VERSION = "0.1.0"
+const VERSION = wss.CoreVersion
 
 var versionCommand = &cmds.Command{
 	Name:        "version",
@@ -35,6 +35,6 @@ func (v *version) Run() error {
 	fmt.Printf("version\t %s.\n", VERSION)
 	fmt.Printf("protocol version\t %d\n", wss.VersionCode)
 	fmt.Println("Author\t genshen<genshenchu@gmail.com>")
-	fmt.Println("github \t https://github.com/DefinitlyEvil/wssocks")
+	fmt.Println("github \t https://github.com/genshen/wssocks")
 	return nil
 }

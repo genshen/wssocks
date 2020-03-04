@@ -2,90 +2,46 @@ package wss
 
 import (
 	"encoding/base64"
-	"github.com/DefinitlyEvil/wssocks/wss/ticker"
-	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
-	"io"
-	"log"
-	"net"
+	log "github.com/sirupsen/logrus"
+)
+
+const (
+	TagData = iota
+	TagEstOk
+	TagEstErr
+	TagNoMore
 )
 
 // proxy client handle one connection, send data to proxy server vai websocket.
 type ProxyClient struct {
-	Conn     *net.TCPConn
 	Id       ksuid.KSUID
-	isClosed bool
+	onData   func(ksuid.KSUID, ServerData) // data from server todo data with  type
+	onClosed func(ksuid.KSUID, bool)       // close connection, param bool: do tellClose if true
+	onError  func(ksuid.KSUID, error)      // if there are error messages
 }
 
-// can't do large compute or communication here
-func (p *ProxyClient) DispatchData(data *ProxyData) error {
-	// decode base64
-	if decodeBytes, err := base64.StdEncoding.DecodeString(data.DataBase64); err != nil { // todo ignore error
-		log.Println("base64 decode error,", err)
-		return err // skip error
-	} else {
-		// just write data back
-		if _, err := p.Conn.Write(decodeBytes); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// close (tcp) connection
-// the close command can be from server
-func (p *ProxyClient) Close() {
-	if p.isClosed {
-		return
-	}
-	p.Conn.Close()
-	p.isClosed = true
+type ServerData struct {
+	Tag  int
+	Data []byte
 }
 
 // handel socket dial results processing
 // copy income connection data to proxy serve via websocket
-func (p *ProxyClient) Serve(wsc *WebSocketClient, tick *ticker.Ticker, addr string) error {
-	log.Println("dialing to", addr)
-	defer log.Println("closing", addr)
-	defer wsc.Close(p.Id)
-
-	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: ProxyEstMessage{Addr: addr}}
-	if err := wsc.WriteWSJSON(&addrSend); err != nil {
-		log.Println("json error:",err)
-		return err
+func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, proxyType int, addr string) error {
+	estMsg := ProxyEstMessage{
+		Type:     proxyType,
+		Addr:     addr,
+		WithData: false,
 	}
-	log.Println("connected to", addr)
-
-	if tick != nil {
-		var buffer Base64WSBufferWriter
-		defer buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
-
-		defer tick.Remove(ticker.TickId(p.Id))
-		tick.Append(ticker.TickId(p.Id), func() { // fixme return error
-			_, err := buffer.Flush(websocket.TextMessage, p.Id, &(wsc.ConcurrentWebSocket))
-			if err != nil {
-				log.Println("write:", err) // todo use of closed network connection
-			}
-		}) // todo p.id
-
-		if _, err := io.Copy(&buffer, p.Conn); err != nil { // copy data to buffer
-			log.Println("io copy error,", err)
-			return nil
-		}
-	} else {
-		// dont use ticker
-		var buffer = make([]byte, 1024*64)
-		for {
-			if n, err := p.Conn.Read(buffer); err != nil {
-				break
-				// log.Println("read error:", err)
-			} else if n > 0 {
-				if err := wsc.WriteProxyMessage(p.Id, buffer[:n]); err != nil {
-					log.Println("write:", err)
-					break
-				}
-			}
-		}
+	if firstSendData != nil {
+		estMsg.WithData = true
+		estMsg.DataBase64 = base64.StdEncoding.EncodeToString(firstSendData)
+	}
+	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: estMsg}
+	if err := wsc.WriteWSJSON(&addrSend); err != nil {
+		log.Error("json error:", err)
+		return err
 	}
 	return nil
 }
