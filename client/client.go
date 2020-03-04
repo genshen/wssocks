@@ -34,6 +34,7 @@ func init() {
 	clientCommand.FlagSet.BoolVar(&client.http, "http", false, `enable http and https proxy.`)
 	clientCommand.FlagSet.StringVar(&client.httpAddr, "http-addr", ":1086", `listen address of http proxy (if enabled).`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
+	clientCommand.FlagSet.StringVar(&client.key, "key", "", `connection key.`)
 
 	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.
 	clientCommand.Runner = &client
@@ -48,6 +49,7 @@ type client struct {
 	remote    string   // string usr of server
 	remoteUrl *url.URL // url of server
 	//	remoteHeader http.Header
+	key string
 }
 
 type Handles struct {
@@ -84,6 +86,10 @@ func (c *client) Run() error {
 
 	dialer := websocket.DefaultDialer
 	wsHeader := make(http.Header) // header in websocket request(default is nil)
+
+	if c.key != "" {
+		wsHeader.Set("Key", c.key)
+	}
 
 	// loading and execute plugin
 	if clientPlugin.HasRedirectPlugin() {
