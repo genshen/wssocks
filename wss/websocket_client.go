@@ -1,19 +1,22 @@
 package wss
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
-	"net"
 	"net/http"
 	"sync"
-	"time"
 )
 
+// WebSocketClient is a collection of proxy clients.
+// It can add/remove proxy clients from this collection,
+// and dispatch web socket message to a specific proxy client.
 type WebSocketClient struct {
 	ConcurrentWebSocket
 	proxies map[ksuid.KSUID]*ProxyClient // all proxies on this websocket.
 	proxyMu sync.RWMutex                 // mutex to operate proxies map.
+	stop    chan interface{}
 }
 
 // get the connection size
@@ -25,22 +28,23 @@ func (wsc *WebSocketClient) ConnSize() int {
 
 // Establish websocket connection.
 // And initialize proxies container.
-func NewWebSocketClient(addr string, header http.Header) (*WebSocketClient, error) {
+func NewWebSocketClient(dialer *websocket.Dialer, addr string, header http.Header) (*WebSocketClient, error) {
 	var wsc WebSocketClient
-	ws, _, err := websocket.DefaultDialer.Dial(addr, header)
+	ws, _, err := dialer.Dial(addr, header)
 	if err != nil {
 		return nil, err
 	}
 	wsc.WsConn = ws
 	wsc.proxies = make(map[ksuid.KSUID]*ProxyClient)
+	wsc.stop = make(chan interface{})
 	return &wsc, nil
 }
 
 // create a new proxy with unique id
-func (wsc *WebSocketClient) NewProxy(conn *net.TCPConn) *ProxyClient {
+func (wsc *WebSocketClient) NewProxy(onData func(ksuid.KSUID, ServerData),
+	onClosed func(ksuid.KSUID, bool), onError func(ksuid.KSUID, error)) *ProxyClient {
 	id := ksuid.New()
-	proxy := ProxyClient{Id: id, Conn: conn}
-	proxy.isClosed = false
+	proxy := ProxyClient{Id: id, onData: onData, onClosed: onClosed, onError: onError}
 
 	wsc.proxyMu.Lock()
 	defer wsc.proxyMu.Unlock()
@@ -72,12 +76,11 @@ func (wsc *WebSocketClient) TellClose(id ksuid.KSUID) error {
 	return nil
 }
 
-// close current (TCP) connection
-func (wsc *WebSocketClient) Close(id ksuid.KSUID) {
+// remove current proxy by id
+func (wsc *WebSocketClient) RemoveProxy(id ksuid.KSUID) {
 	wsc.proxyMu.Lock()
 	defer wsc.proxyMu.Unlock()
-	if proxy, ok := wsc.proxies[id]; ok {
-		proxy.Close()
+	if _, ok := wsc.proxies[id]; ok {
 		delete(wsc.proxies, id)
 	}
 }
@@ -85,6 +88,14 @@ func (wsc *WebSocketClient) Close(id ksuid.KSUID) {
 // listen income websocket messages and dispatch to different proxies.
 func (wsc *WebSocketClient) ListenIncomeMsg() error {
 	for {
+		// check stop first
+		select {
+		case <-wsc.stop:
+			return StoppedError
+		default:
+			// if the channel is still open, continue as normal
+		}
+
 		_, data, err := wsc.WsConn.ReadMessage()
 		if err != nil {
 			// todo close all
@@ -106,18 +117,19 @@ func (wsc *WebSocketClient) ListenIncomeMsg() error {
 				// now, we known the id and type of incoming data
 				switch socketStream.Type {
 				case WsTpClose: // remove proxy
-					wsc.Close(ksid)
+					proxy.onClosed(ksid, false)
 				case WsTpData:
 					var proxyData ProxyData
 					if err := json.Unmarshal(socketData, &proxyData); err != nil {
-						wsc.Close(ksid)
-						wsc.TellClose(ksid)
+						proxy.onError(ksid, err)
 						continue
 					}
-					if err := proxy.DispatchData(&proxyData); err != nil {
-						wsc.Close(ksid)
-						wsc.TellClose(ksid)
+					if decodeBytes, err := base64.StdEncoding.DecodeString(proxyData.DataBase64); err != nil {
+						proxy.onError(ksid, err)
 						continue
+					} else {
+						// just write data back
+						proxy.onData(ksid, ServerData{Tag: proxyData.Tag, Data: decodeBytes})
 					}
 				}
 			}
@@ -125,22 +137,10 @@ func (wsc *WebSocketClient) ListenIncomeMsg() error {
 	}
 }
 
-// start sending heart beat to server.
-func (wsc *WebSocketClient) HeartBeat() error {
-	t := time.NewTicker(time.Second * 15)
-	defer t.Stop()
-	for {
-		select {
-		case <-t.C:
-			heartBeats := WebSocketMessage{
-				Id:   ksuid.KSUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.String(),
-				Type: WsTpBeats,
-				Data: nil,
-			}
-			if err := wsc.WriteWSJSON(heartBeats); err != nil {
-				return err
-			}
-		}
+func (wsc *WebSocketClient) Close() error {
+	close(wsc.stop)
+	if err := wsc.WSClose(); err != nil {
+		return err
 	}
 	return nil
 }

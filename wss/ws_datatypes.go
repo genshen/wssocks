@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	WsTpVer  = "version"
-	WsTpBeats  = "heart_beat"
+	WsTpVer   = "version"
+	WsTpBeats = "heart_beat"
 	WsTpClose = "finish"
 	WsTpData  = "data"
 	WsTpEst   = "est" // establish
@@ -58,6 +58,7 @@ type WebSocketMessage struct {
 
 // Proxy data (from server to client or from client to server)
 type ProxyData struct {
+	Tag        int    `json:"tag"`
 	DataBase64 string `json:"base64"`
 }
 
@@ -66,6 +67,8 @@ type ProxyData struct {
 
 // Proxy message for establishing connection
 type ProxyEstMessage struct {
-	Addr string `json:"addr"`
+	Type       int    `json:"proxy_type"`
+	Addr       string `json:"addr"`
+	WithData   bool   `json:"with_data"`
+	DataBase64 string `json:"base64"` // establish with initialized data.
 }
-

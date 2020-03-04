@@ -3,10 +3,9 @@ package server
 import (
 	"flag"
 	"github.com/genshen/cmds"
-	"github.com/DefinitlyEvil/wssocks/wss"
-	"log"
+	"github.com/genshen/wssocks/wss"
+	log "github.com/sirupsen/logrus"
 	"net/http"
-	"time"
 )
 
 var serverCommand = &cmds.Command{
@@ -22,7 +21,7 @@ func init() {
 	fs := flag.NewFlagSet("server", flag.ExitOnError)
 	serverCommand.FlagSet = fs
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
-	serverCommand.FlagSet.IntVar(&s.ticker, "ticker", 0, `ticker(ms) to send data to client.`)
+	serverCommand.FlagSet.BoolVar(&s.http, "http", true, `enable http and https proxy.`)
 	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
 	serverCommand.FlagSet.StringVar(&s.key, "key", "", `connection key. `)
 
@@ -32,32 +31,20 @@ func init() {
 
 type server struct {
 	address string
-	ticker  int
-	key string
+	http    bool   // enable http and https proxy
+	key     string // connection key
 }
 
 func (s *server) PreRun() error {
 	return nil
 }
 
-func (s *server) checkHeader(w http.ResponseWriter, r *http.Request) {
-	if s.key != "" && r.Header.Get("Key") != s.key {
-		w.WriteHeader(401)
-		w.Write([]byte("Access denied! "))
-		return
-	}
-	wss.ServeWs(w, r)
-}
-
 func (s *server) Run() error {
-	if s.ticker != 0 {
-		ticker := wss.StartTicker(time.Microsecond * time.Duration(100))
-		defer ticker.Stop()
-	}
-
-	// new time ticker to flush data into websocket (to client).
-	http.HandleFunc("/", s.checkHeader)
-	log.Println("listening on ", s.address)
+	config := wss.WebsocksServerConfig{EnableHttp: s.http, ConnKey: s.key}
+	http.HandleFunc("/", wss.ServeWsWrapper(config))
+	log.WithFields(log.Fields{
+		"listen address": s.address,
+	}).Info("listening for incoming messages.")
 	log.Fatal(http.ListenAndServe(s.address, nil))
 	return nil
 }

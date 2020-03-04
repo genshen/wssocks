@@ -7,7 +7,7 @@ import (
 	"github.com/DefinitlyEvil/wssocks/wss"
 )
 
-const VERSION = "0.1.0"
+const VERSION = wss.CoreVersion
 
 var versionCommand = &cmds.Command{
 	Name:        "version",
