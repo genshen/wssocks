@@ -23,6 +23,7 @@ func init() {
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
 	serverCommand.FlagSet.BoolVar(&s.http, "http", true, `enable http and https proxy.`)
 	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
+	serverCommand.FlagSet.StringVar(&s.key, "key", "", `connection key. `)
 
 	serverCommand.Runner = &s
 	cmds.AllCommands = append(cmds.AllCommands, serverCommand)
@@ -30,7 +31,8 @@ func init() {
 
 type server struct {
 	address string
-	http    bool // enable http and https proxy
+	http    bool   // enable http and https proxy
+	key     string // connection key
 }
 
 func (s *server) PreRun() error {
@@ -38,7 +40,7 @@ func (s *server) PreRun() error {
 }
 
 func (s *server) Run() error {
-	config := wss.WebsocksServerConfig{EnableHttp: s.http}
+	config := wss.WebsocksServerConfig{EnableHttp: s.http, ConnKey: s.key}
 	http.HandleFunc("/", wss.ServeWsWrapper(config))
 	log.WithFields(log.Fields{
 		"listen address": s.address,
