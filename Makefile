@@ -1,5 +1,7 @@
 PACKAGE=github.com/genshen/wssocks
 
+.PHONY: clean all
+
 all: wssocks-linux-amd64 wssocks-linux-arm64 wssocks-darwin-amd64 wssocks-windows-amd64.exe
 
 wssocks-linux-amd64:
