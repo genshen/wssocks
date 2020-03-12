@@ -22,6 +22,7 @@ func ProxyTypeStr(tp int) string {
 	return "unknown"
 }
 
+// interface of proxy client, supported types: http/https/socks5
 type ProxyInterface interface {
 	ProxyType() int
 	// return a bool value to indicate whether it is the matched protocol.
