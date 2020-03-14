@@ -26,7 +26,7 @@ func NewClient() *Client {
 	return &client
 }
 
-// response to socks5 client and start to exchange data between socks5 client and
+// response to socks5/https client and start to exchange data with socks5/https client
 func (client *Client) Reply(conn net.Conn, enableHttp bool,
 	onDial func(conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error) error {
 	defer conn.Close()
@@ -115,61 +115,66 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 				record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
 				defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
 
-				type Done struct {
-					tell bool
-					err  error
-				}
-				done := make(chan Done, 2)
-				// defer close(done)
-
-				// create a with proxy with callback func
-				proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) {
-					if _, err := conn.Write(data.Data); err != nil {
-						done <- Done{true, err}
-					}
-				}, func(id ksuid.KSUID, tell bool) {
-					done <- Done{tell, nil}
-				}, func(id ksuid.KSUID, err error) {
-					if err != nil {
-						done <- Done{true, err}
-					}
-				})
-
-				// tell server to establish connection
-				if err := proxy.Establish(wsc, firstSendData, proxyType, addr); err != nil {
-					wsc.RemoveProxy(proxy.Id)
-					if err := wsc.TellClose(proxy.Id); err != nil {
-						log.Error("close error", err)
-					}
-					return err
-				}
-
-				// trans incoming data from proxy client application.
-				go func() {
-					writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id}
-					if _, err := io.Copy(&writer, conn); err != nil {
-						log.Error("write error:", err)
-					}
-					done <- Done{true, nil}
-				}()
-
-				d := <-done
-				wsc.RemoveProxy(proxy.Id)
-				if d.tell {
-					if err := wsc.TellClose(proxy.Id); err != nil {
-						return err
-					}
-				}
-				if d.err != nil {
-					return d.err
-				}
-				return nil
+				// on connection established, copy data now.
+				return client.transData(wsc, conn, firstSendData, proxyType, addr)
 			})
 			if err != nil {
 				log.Error(err)
 			}
 		}()
 	}
+}
+
+func (client *Client) transData(wsc *WebSocketClient, conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
+	type Done struct {
+		tell bool
+		err  error
+	}
+	done := make(chan Done, 2)
+	// defer close(done)
+
+	// create a with proxy with callback func
+	proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) {
+		if _, err := conn.Write(data.Data); err != nil {
+			done <- Done{true, err}
+		}
+	}, func(id ksuid.KSUID, tell bool) {
+		done <- Done{tell, nil}
+	}, func(id ksuid.KSUID, err error) {
+		if err != nil {
+			done <- Done{true, err}
+		}
+	})
+
+	// tell server to establish connection
+	if err := proxy.Establish(wsc, firstSendData, proxyType, addr); err != nil {
+		wsc.RemoveProxy(proxy.Id)
+		if err := wsc.TellClose(proxy.Id); err != nil {
+			log.Error("close error", err)
+		}
+		return err
+	}
+
+	// trans incoming data from proxy client application.
+	go func() {
+		writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id}
+		if _, err := io.Copy(&writer, conn); err != nil {
+			log.Error("write error:", err)
+		}
+		done <- Done{true, nil}
+	}()
+
+	d := <-done
+	wsc.RemoveProxy(proxy.Id)
+	if d.tell {
+		if err := wsc.TellClose(proxy.Id); err != nil {
+			return err
+		}
+	}
+	if d.err != nil {
+		return d.err
+	}
+	return nil
 }
 
 // Close stops listening on the TCP address,
