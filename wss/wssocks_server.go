@@ -10,14 +10,15 @@ import (
 var upgrader = websocket.Upgrader{} // use default options
 
 type WebsocksServerConfig struct {
-	EnableHttp bool
-	ConnKey    string // connection key
+	EnableHttp    bool
+	EnableConnKey bool   // bale connection key
+	ConnKey       string // connection key
 }
 
 // return a a function handling websocket requests from the peer.
 func ServeWsWrapper(config WebsocksServerConfig) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if config.ConnKey != "" && r.Header.Get("Key") != config.ConnKey {
+		if config.EnableConnKey && r.Header.Get("Key") != config.ConnKey {
 			w.WriteHeader(401)
 			w.Write([]byte("Access denied!\n"))
 			return
