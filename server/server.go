@@ -26,17 +26,18 @@ func init() {
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
 	serverCommand.FlagSet.BoolVar(&s.http, "http", true, `enable http and https proxy.`)
 	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
-	serverCommand.FlagSet.BoolVar(&s.keyEnable, "key", false, `enable/disable connection key.`)
+	serverCommand.FlagSet.BoolVar(&s.authEnable, "auth", false, `enable/disable connection authentication.`)
+	serverCommand.FlagSet.StringVar(&s.authKey, "auth_key", "", "connection key for authentication. \nIf not provided, it will generate one randomly.")
 
 	serverCommand.Runner = &s
 	cmds.AllCommands = append(cmds.AllCommands, serverCommand)
 }
 
 type server struct {
-	address   string
-	http      bool   // enable http and https proxy
-	keyEnable bool   // enable connection key
-	key       string // the connection key if enabled
+	address    string
+	http       bool   // enable http and https proxy
+	authEnable bool   // enable authentication connection key
+	authKey    string // the connection key if authentication is enabled
 }
 
 func genRandBytes(n int) ([]byte, error) {
@@ -50,21 +51,22 @@ func genRandBytes(n int) ([]byte, error) {
 }
 
 func (s *server) PreRun() error {
-	if s.keyEnable {
+	if s.authEnable && s.authKey == "" {
+		log.Trace("empty authentication key provided, now it will generate a random authentication key.")
 		b, err := genRandBytes(12)
 		if err != nil {
 			return err
 		}
-		s.key = strings.ToUpper(hex.EncodeToString(b))
+		s.authKey = strings.ToUpper(hex.EncodeToString(b))
 	}
 	return nil
 }
 
 func (s *server) Run() error {
-	config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.keyEnable, ConnKey: s.key}
+	config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey}
 	http.HandleFunc("/", wss.ServeWsWrapper(config))
-	if s.keyEnable {
-		log.Info("connection secret key: ", s.key)
+	if s.authEnable {
+		log.Info("connection authentication key: ", s.authKey)
 	}
 	log.WithFields(log.Fields{
 		"listen address": s.address,
