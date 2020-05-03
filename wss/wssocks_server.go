@@ -49,17 +49,19 @@ func serveWs(w http.ResponseWriter, r *http.Request, config WebsocksServerConfig
 		return
 	}
 
-	sws := NewServerWS(ws)
+	hub := NewHub(ws)
+	defer hub.Close()
+    go hub.Run()
 	// read messages from webSocket
 	for {
-		_, p, err := ws.ReadMessage()
+		msgType, p, err := ws.ReadMessage()
 		// if WebSocket is closed by some reason, then this func will return,
 		// and 'done' channel will be set, the outer func will reach to the end.
 		if err != nil && err != io.EOF {
 			log.Error("error reading webSocket message:", err)
 			break
 		}
-		if err = sws.dispatchMessage(p, config); err != nil {
+        if err = dispatchMessage(hub, msgType, p, config); err != nil {
 			log.Error("error proxy:", err)
 			// break skip error
 		}
