@@ -20,10 +20,22 @@ type Connector struct {
 	Conn io.ReadWriteCloser
 }
 
+// interface of establishing proxy connection with target
+type ProxyEstablish interface {
+    establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error
+
+    // data from client todo data with type
+    onData(data ClientData) error
+
+    // close connection
+    // tell: whether to send close message to proxy client
+    onClosed(tell bool) error
+}
+
 type ClientData ServerData
 
 func dispatchMessage(hub *Hub, msgType int, data []byte, config WebsocksServerConfig) error {
-	if msgType == websocket.TextMessage {
+    if msgType == websocket.TextMessage {
 		return dispatchDataMessage(hub, data, config)
 	}
 	return nil
@@ -82,7 +94,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 				log.Error("base64 decode error,", err)
 				return err
 			} else {
-				proxy.onData(ClientData{Tag: requestMsg.Tag, Data: decodeBytes})
+                return proxy.ProxyIns.onData(ClientData{Tag: requestMsg.Tag, Data: decodeBytes})
 			}
 		}
 		return nil
@@ -94,43 +106,57 @@ func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
 	// todo size is only one client's size.
 	//	log.WithField("size", s.GetConnectorSize()+1).Trace("connection size changed.")
 	//	log.WithField("address", proxyEstMsg.Addr).Trace("proxy connected to remote")
+    var e ProxyEstablish
 	if proxyMeta._type == ProxyTypeHttp {
-		if err := establishHttp(hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData); err != nil {
-			log.Error(err) // todo error handle better way
-		}
+        e = &HttpProxyEst{}
 	} else {
-		if err := establish(hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData); err != nil {
-			log.Error(err) // todo error handle better way
-		}
-	}
+        e = &DefaultProxyEst{}
+    }
+    if err := e.establish(hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData); err != nil {
+        log.Error(err) // todo error handle better way
+    }
 	//	log.WithField("size", s.GetConnectorSize()).Trace("connection size changed.")
 	hub.tellClose <- proxyMeta.id // tell client to close connection.
 }
 
+// data type used in DefaultProxyEst to pass data to channel
+type ChanDone struct {
+    tell bool
+    err  error
+}
+
+// interface implementation for socks5 and https proxy.
+type DefaultProxyEst struct {
+    done    chan ChanDone
+    tcpConn net.Conn
+}
+
+func (e *DefaultProxyEst) onData(data ClientData) error {
+    if _, err := e.tcpConn.Write(data.Data); err != nil {
+        e.done <- ChanDone{true, err}
+    }
+    return nil
+}
+
+func (e *DefaultProxyEst) onClosed(tell bool) error {
+    e.done <- ChanDone{tell, nil}
+    return nil // todo error
+}
+
 // data: data send in establish step (can be nil).
-func establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error {
-	tcpConn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
+func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error {
+    conn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
 	if err != nil {
 		return err
 	}
-	defer tcpConn.Close()
+    e.tcpConn = conn
+    defer conn.Close()
 
-	type Done struct {
-		tell bool
-		err  error
-	}
-	done := make(chan Done, 2)
+    e.done = make(chan ChanDone, 2)
 	//defer close(done)
 
 	// todo check exists
-	proxy := ProxyServer{Id: id, onData: func(data ClientData) {
-		if _, err := tcpConn.Write(data.Data); err != nil {
-			done <- Done{true, err}
-		}
-	}, onClosed: func(tell bool) {
-		done <- Done{tell, err}
-	}}
-	hub.register <- &proxy
+    hub.register <- &ProxyServer{Id: id, ProxyIns: e}
 	defer hub.RemoveProxy(id)
 
 	switch proxyType {
@@ -146,13 +172,13 @@ func establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte
 
 	go func() {
 		writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id}
-		if _, err := io.Copy(&writer, tcpConn); err != nil {
+        if _, err := io.Copy(&writer, conn); err != nil {
 			log.Error("copy error,", err)
 		}
-		done <- Done{true, nil}
+        e.done <- ChanDone{true, nil}
 	}()
 
-	d := <-done
+    d := <-e.done
 	// s.RemoveProxy(proxy.Id)
 	// tellClosed is called outside this func.
 	if d.err != nil {
@@ -161,7 +187,25 @@ func establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte
 	return nil
 }
 
-func establishHttp(hub *Hub, id ksuid.KSUID, proxyType int, addr string, header []byte) error {
+type HttpProxyEst struct {
+    bodyReadCloser *BufferedWR
+}
+
+func (h *HttpProxyEst) onData(data ClientData) error {
+    if data.Tag == TagNoMore {
+        return h.bodyReadCloser.Close() // close due to no more data.
+    }
+    if _,err := h.bodyReadCloser.Write(data.Data);  err !=nil{
+        return err
+    }
+    return nil
+}
+
+func (h *HttpProxyEst) onClosed(tell bool) error {
+    return h.bodyReadCloser.Close() // close from client
+}
+
+func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, header []byte) error {
 	if header == nil {
 		hub.tellClose <- id
 		_ = hub.WriteProxyMessage(id, TagEstErr, nil)
@@ -173,17 +217,8 @@ func establishHttp(hub *Hub, id ksuid.KSUID, proxyType int, addr string, header 
 	defer close(closed)
 	defer close(client)
 
+    hub.register <- &ProxyServer{Id: id, ProxyIns: h}
 	bodyReadCloser := NewBufferWR()
-	proxy := ProxyServer{Id: id, onData: func(data ClientData) {
-		if data.Tag == TagNoMore {
-			bodyReadCloser.Close() // close due to no more data.
-			return
-		}
-		bodyReadCloser.Write(data.Data)
-	}, onClosed: func(tell bool) {
-		bodyReadCloser.Close() // close from client
-	}}
-	hub.register <- &proxy
 	defer hub.RemoveProxy(id)
 	defer func() {
 		if !bodyReadCloser.isClosed() { // if it is not closed by client.

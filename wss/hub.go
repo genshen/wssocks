@@ -8,8 +8,7 @@ import (
 
 type ProxyServer struct {
     Id       ksuid.KSUID      // id of proxy connection
-    onData   func(ClientData) // data from client todo data with type
-    onClosed func(bool)       // close connection, param bool: do tellClose if true
+    ProxyIns ProxyEstablish
 }
 
 // Hub maintains the set of active proxy clients in server side for a user
@@ -76,7 +75,7 @@ func (h *Hub) Run() {
                 break
             }
             if proxy := h.GetProxyById(id); proxy != nil {
-                proxy.onClosed(false) // todo remove proxy here
+                proxy.ProxyIns.onClosed(false) // todo remove proxy here
             }
         case id := <-h.tellClose: // send close message to proxy client
             h.tellClosed(id)
