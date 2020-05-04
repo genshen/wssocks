@@ -9,6 +9,7 @@ import (
 	"github.com/genshen/wssocks/wss/term_view"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ssh/terminal"
 	"net/http"
 	"net/url"
 	"os"
@@ -178,13 +179,16 @@ func (c *client) Run() error {
 	}()
 
 	record := wss.NewConnRecord()
-	plog := term_view.NewPLog(record)
-	log.SetOutput(plog) // change log stdout to plog
+	if terminal.IsTerminal(int(os.Stdout.Fd())) {
+		// if it is tty, use term_view as output, and set onChange function to update output
+		plog := term_view.NewPLog(record)
+		log.SetOutput(plog) // change log stdout to plog
 
-	record.OnChange = func() {
-		// update log
-		plog.SetLogBuffer(record) // call Writer.Write() to set log data into buffer
-		plog.Writer.Flush(nil)    // flush buffer
+		record.OnChange = func() {
+			// update log
+			plog.SetLogBuffer(record) // call Writer.Write() to set log data into buffer
+			plog.Writer.Flush(nil)    // flush buffer
+		}
 	}
 
 	// http listening
