@@ -1,7 +1,6 @@
 package wss
 
 import (
-	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ func TestBufferWRClose(t *testing.T) {
 	go func() {
 		var d1 [1024]byte
 		for {
+            // with close, read can return
 			if _, err := bwr.Read(d1[:]); err == io.EOF {
 				break
 			}
@@ -27,7 +27,6 @@ func TestBufferWRClose(t *testing.T) {
 }
 
 func TestBufferWRWrite(t *testing.T) {
-	done := make(chan struct{}, 1)
 	bwr := NewBufferWR()
 
 	var d2 [1024]byte
@@ -35,8 +34,6 @@ func TestBufferWRWrite(t *testing.T) {
 	_, _ = bwr.Write(d2[:])
 	_, _ = bwr.Write(d2[:])
 	_, _ = bwr.Write(d2[:])
-
-	<-done
 }
 
 func TestBufferWR(t *testing.T) {
@@ -46,11 +43,15 @@ func TestBufferWR(t *testing.T) {
 	go func() {
 		var d1 [3 * 1024]byte
 		for i := 0; i < 1; i++ {
-			if _, err := bwr.Read(d1[:]); err == io.EOF {
+            // read all data at once
+            if n, err := bwr.Read(d1[:]); err == io.EOF {
 				break
+            } else {
+                if n != 3*1024 {
+                    t.Error("read data length not match")
+                }
 			}
 		}
-		fmt.Println("read passed")
 		done <- struct{}{}
 	}()
 
@@ -67,13 +68,16 @@ func TestBufferWR2(t *testing.T) {
 	bwr := NewBufferWR()
 
 	go func() {
-		var d1 [ 1024]byte
+        var d1 [1024]byte
 		for i := 0; i < 3; i++ {
-			if _, err := bwr.Read(d1[:]); err == io.EOF {
+            if n, err := bwr.Read(d1[:]); err == io.EOF {
 				break
+            } else {
+                if n != 1024 {
+                    t.Error("read data length not match")
+                }
 			}
 		}
-		fmt.Println("read passed")
 		done <- struct{}{}
 	}()
 
@@ -85,4 +89,28 @@ func TestBufferWR2(t *testing.T) {
 	_, _ = bwr.Write(d2[:])
 
 	<-done
+}
+
+func TestBufferWR3(t *testing.T) {
+    done := make(chan struct{}, 1)
+    bwr := NewBufferWR()
+
+    go func() {
+        var d1 [1024]byte
+        for i := 0; i < 3; i++ {
+            if n, err := bwr.Read(d1[:]); err == io.EOF {
+                break
+            } else {
+                if n != 1024 {
+                    t.Error("read data length not match")
+                }
+            }
+        }
+        done <- struct{}{}
+    }()
+
+    var d2 [3 * 1024]byte
+    _, _ = bwr.Write(d2[:]) // 1 writes, but 3 reads, due to the small read buffer
+
+    <-done
 }
