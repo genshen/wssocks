@@ -26,18 +26,15 @@ func NewClient() *Client {
 	return &client
 }
 
-// response to socks5/https client and start to exchange data with socks5/https client
-func (client *Client) Reply(conn net.Conn, enableHttp bool,
-	onDial func(conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error) error {
-	defer conn.Close()
+// parse target address and proxy type, and response to socks5/https client
+func (client *Client) Reply(conn net.Conn, enableHttp bool) ([]byte, int, string, error) {
 	var buffer [1024]byte
-	var firstSendData []byte = nil
 	var addr string
 	var proxyType int
 
 	n, err := conn.Read(buffer[:])
 	if err != nil {
-		return err
+        return nil, 0, "", err
 	}
 
 	// select a matched proxy type
@@ -54,29 +51,23 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool,
 	}
 
 	if matchedInstance == nil {
-		return errors.New("only socks5 or http(s) proxy")
+		return nil, 0, "", errors.New("only socks5 or http(s) proxy")
 	}
 
 	// set address and type
 	if proxyAddr, err := matchedInstance.ParseHeader(conn, buffer[:n]); err != nil {
-		return err
+		return nil, 0, "", err
 	} else {
 		proxyType = matchedInstance.ProxyType()
 		addr = proxyAddr
 	}
 	// set data sent in establish step.
-	if newBuffer, err := matchedInstance.EstablishData(buffer[:n]); err != nil {
-		return err
+	if firstSendData, err := matchedInstance.EstablishData(buffer[:n]); err != nil {
+		return nil, 0, "", err
 	} else {
-		firstSendData = newBuffer
+		// firstSendData can be nil, which means there is no data to be send during connection establishing.
+		return firstSendData, proxyType, addr, nil
 	}
-
-	//  dial to target.
-	// firstSendData can be nil, which means there is no data to be send during connection establishing.
-	if err := onDial(conn.(*net.TCPConn), firstSendData, proxyType, addr); err != nil {
-		return err
-	}
-	return nil
 }
 
 // listen on local address:port and forward socks5 requests to wssocks server.
@@ -107,18 +98,23 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 		}
 
 		go func() {
-			err := client.Reply(c, enableHttp, func(conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
-				defer conn.Close()
-				client.wgClose.Add(1)
-				defer client.wgClose.Done()
-
-				record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
-				defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
-
-				// on connection established, copy data now.
-				return client.transData(wsc, conn, firstSendData, proxyType, addr)
-			})
+			defer c.Close()
+			// In reply, we can get proxy type, target address and first send data.
+			firstSendData, proxyType, addr, err := client.Reply(c, enableHttp)
 			if err != nil {
+				log.Error(err)
+			}
+			conn := c.(*net.TCPConn)
+			defer conn.Close()
+			client.wgClose.Add(1)
+			defer client.wgClose.Done()
+
+			// update connection record
+			record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
+			defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
+
+			// on connection established, copy data now.
+			if err := client.transData(wsc, conn, firstSendData, proxyType, addr); err != nil {
 				log.Error(err)
 			}
 		}()
