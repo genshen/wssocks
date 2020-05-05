@@ -29,7 +29,7 @@ var clientCommand = &cmds.Command{
 
 func init() {
 	var client client
-	fs := flag.NewFlagSet(CommandNameClient, flag.ExitOnError)
+    fs := flag.NewFlagSet(CommandNameClient, flag.ContinueOnError)
 	clientCommand.FlagSet = fs
 	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5 proxy.`)
 	clientCommand.FlagSet.BoolVar(&client.http, "http", false, `enable http and https proxy.`)

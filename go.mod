@@ -1,9 +1,9 @@
 module github.com/genshen/wssocks
 
-go 1.12
+go 1.13
 
 require (
-	github.com/genshen/cmds v0.0.0-20190410131841-986519260a65
+    github.com/genshen/cmds v0.0.0-20200505065256-d4c52690e15b
 	github.com/gorilla/websocket v1.4.2
 	github.com/mattn/go-isatty v0.0.12
 	github.com/segmentio/ksuid v1.0.2

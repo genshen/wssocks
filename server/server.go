@@ -21,7 +21,7 @@ var serverCommand = &cmds.Command{
 
 func init() {
 	var s server
-	fs := flag.NewFlagSet("server", flag.ExitOnError)
+    fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	serverCommand.FlagSet = fs
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
 	serverCommand.FlagSet.BoolVar(&s.http, "http", true, `enable http and https proxy.`)
