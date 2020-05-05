@@ -13,6 +13,6 @@ const ESC = 27
 // clear the line and move the cursor up
 var clear = fmt.Sprintf("%c[%dA%c[2K", ESC, 1, ESC)
 
-func (w *Writer) clearLines() {
-	_, _ = fmt.Fprint(w.OutDev, strings.Repeat(clear, w.lineCount))
+func clearLines(outDev FdWriter, lines int) {
+    _, _ = fmt.Fprint(outDev, strings.Repeat(clear, lines))
 }
