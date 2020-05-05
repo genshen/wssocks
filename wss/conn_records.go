@@ -11,7 +11,7 @@ type ConnRecord struct {
 	ConnSize  uint            // total size of current connections
 	Addresses map[string]uint // current connections as well as its count
 	Writer    *io.Writer      // terminal writer  todo defer Flush
-	OnChange  func()
+    OnChange  func(status ConnStatus)
 	Mutex     *sync.Mutex
 }
 
@@ -53,6 +53,6 @@ func (cr *ConnRecord) Update(status ConnStatus) {
 	}
 	// update log
 	if cr.OnChange != nil {
-		cr.OnChange()
+        cr.OnChange(status)
 	}
 }

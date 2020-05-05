@@ -184,11 +184,19 @@ func (c *client) Run() error {
 		plog := term_view.NewPLog(record)
 		log.SetOutput(plog) // change log stdout to plog
 
-		record.OnChange = func() {
+        record.OnChange = func(wss.ConnStatus) {
 			// update log
 			plog.SetLogBuffer(record) // call Writer.Write() to set log data into buffer
 			plog.Writer.Flush(nil)    // flush buffer
 		}
+    } else {
+        record.OnChange = func(status wss.ConnStatus) {
+            if status.IsNew {
+                log.WithField("address", status.Address).Traceln("new proxy connection")
+            } else {
+                log.WithField("address", status.Address).Traceln("close proxy connection")
+            }
+        }
 	}
 
 	// http listening
