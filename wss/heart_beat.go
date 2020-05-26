@@ -9,14 +9,16 @@ import (
 
 type HeartBeat struct {
 	wsc      *WebSocketClient
-	done     chan bool
+    cancel   context.CancelFunc
 	isClosed bool
 }
 
-func NewHeartBeat(wsc *WebSocketClient) *HeartBeat {
+func NewHeartBeat(wsc *WebSocketClient) (*HeartBeat, context.Context) {
 	hb := HeartBeat{wsc: wsc, isClosed: false}
-	hb.done = make(chan bool)
-	return &hb
+    ctx, can := context.WithCancel(context.Background())
+
+    hb.cancel = can
+    return &hb, ctx
 }
 
 // close heartbeat sending
@@ -24,17 +26,17 @@ func (hb *HeartBeat) Close() {
 	if hb.isClosed {
 		return
 	}
-	hb.done <- true
-	close(hb.done)
+    hb.isClosed = true
+    hb.cancel()
 }
 
 // start sending heart beat to server.
-func (hb *HeartBeat) Start() error {
+func (hb *HeartBeat) Start(ctx context.Context) error {
 	t := time.NewTicker(time.Second * 15)
 	defer t.Stop()
 	for {
 		select {
-		case <-hb.done:
+        case <-ctx.Done():
 			return nil
 		case <-t.C:
 			heartBeats := WebSocketMessage{

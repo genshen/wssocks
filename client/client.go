@@ -164,18 +164,19 @@ func (c *client) Run() error {
 
 	// start websocket message listen.
 	go func() {
-		defer once.Do(closeAll)
 		defer wg.Done()
-        if err := wsc.ListenIncomeMsg(context.TODO()); err != nil {
+        defer once.Do(closeAll)
+        if err := wsc.ListenIncomeMsg(); err != nil {
 			log.Error("error websocket read:", err)
 		}
 	}()
 	// send heart beats.
-	hdl.hb = wss.NewHeartBeat(wsc)
+    heartbeat, hbCtx := wss.NewHeartBeat(wsc)
+    hdl.hb = heartbeat
 	go func() {
-		defer once.Do(closeAll)
 		defer wg.Done()
-		if err := hdl.hb.Start(); err != nil {
+        defer once.Do(closeAll)
+        if err := hdl.hb.Start(hbCtx); err != nil {
 			log.Info("heartbeat ending", err)
 		}
 	}()
@@ -207,8 +208,8 @@ func (c *client) Run() error {
 		log.WithField("http listen address", c.httpAddr).
 			Info("listening on local address for incoming proxy requests.")
 		go func() {
-			defer once.Do(closeAll)
 			defer wg.Done()
+            defer once.Do(closeAll)
 			handle := wss.NewHttpProxy(wsc, record)
 			hdl.httpServer = &http.Server{Addr: c.httpAddr, Handler: &handle}
 			if err := hdl.httpServer.ListenAndServe(); err != nil {
@@ -220,8 +221,8 @@ func (c *client) Run() error {
 	// start listen for socks5 and https connection.
 	hdl.cl = wss.NewClient()
 	go func() {
-		defer once.Do(closeAll)
-		defer wg.Done()
+        defer wg.Done()
+        defer once.Do(closeAll)
 		if err := hdl.cl.ListenAndServe(record, wsc, c.address, c.http, func() {
 			if c.http {
 				log.WithField("socks5 listen address", c.address).

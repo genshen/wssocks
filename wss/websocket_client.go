@@ -18,7 +18,7 @@ type WebSocketClient struct {
 	ConcurrentWebSocket
 	proxies map[ksuid.KSUID]*ProxyClient // all proxies on this websocket.
 	proxyMu sync.RWMutex                 // mutex to operate proxies map.
-	stop    chan interface{}
+    cancel context.CancelFunc
 }
 
 // get the connection size
@@ -38,7 +38,6 @@ func NewWebSocketClient(ctx context.Context, addr string, hc *http.Client, heade
 	}
 	wsc.WsConn = ws
 	wsc.proxies = make(map[ksuid.KSUID]*ProxyClient)
-	wsc.stop = make(chan interface{})
 	return &wsc, nil
 }
 
@@ -88,11 +87,14 @@ func (wsc *WebSocketClient) RemoveProxy(id ksuid.KSUID) {
 }
 
 // listen income websocket messages and dispatch to different proxies.
-func (wsc *WebSocketClient) ListenIncomeMsg(ctx context.Context) error {
+func (wsc *WebSocketClient) ListenIncomeMsg() error {
+    ctx, can := context.WithCancel(context.Background())
+    wsc.cancel = can
+
 	for {
 		// check stop first
 		select {
-		case <-wsc.stop:
+        case <-ctx.Done():
 			return StoppedError
 		default:
 			// if the channel is still open, continue as normal
@@ -140,7 +142,7 @@ func (wsc *WebSocketClient) ListenIncomeMsg(ctx context.Context) error {
 }
 
 func (wsc *WebSocketClient) Close() error {
-	close(wsc.stop)
+    wsc.cancel()
 	if err := wsc.WSClose(); err != nil {
 		return err
 	}
