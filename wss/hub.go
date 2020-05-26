@@ -1,13 +1,15 @@
 package wss
 
 import (
-    "github.com/gorilla/websocket"
+    "context"
     "github.com/segmentio/ksuid"
+    "nhooyr.io/websocket"
+    "nhooyr.io/websocket/wsjson"
     "sync"
 )
 
 type ProxyServer struct {
-    Id       ksuid.KSUID      // id of proxy connection
+    Id       ksuid.KSUID // id of proxy connection
     ProxyIns ProxyEstablish
 }
 
@@ -38,7 +40,7 @@ type ProxyRegister struct {
     withData []byte
 }
 
-func NewHub(conn *websocket.Conn) *Hub {
+func NewHub(ctx context.Context, conn *websocket.Conn) *Hub {
     return &Hub{
         ConcurrentWebSocket: ConcurrentWebSocket{WsConn: conn},
         est:                 make(chan ProxyRegister),
@@ -132,7 +134,7 @@ func (h *Hub) tellClosed(id ksuid.KSUID) error {
         Data: nil,
     }
     // fixme lock or NextWriter
-    if err := h.WriteWSJSON(&finish); err != nil {
+    if err := wsjson.Write(context.TODO(), h.WsConn, &finish); err != nil {
         return err
     }
     return nil

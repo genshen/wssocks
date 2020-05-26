@@ -1,7 +1,9 @@
 package wss
 
 import (
+    "context"
 	"github.com/segmentio/ksuid"
+    "nhooyr.io/websocket/wsjson"
 	"time"
 )
 
@@ -40,7 +42,7 @@ func (hb *HeartBeat) Start() error {
 				Type: WsTpBeats,
 				Data: nil,
 			}
-			if err := hb.wsc.WriteWSJSON(heartBeats); err != nil {
+            if err := wsjson.Write(context.TODO(), hb.wsc.WsConn, heartBeats); err != nil {
 				return err
 			}
 		}

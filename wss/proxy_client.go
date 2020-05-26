@@ -1,9 +1,11 @@
 package wss
 
 import (
+    "context"
 	"encoding/base64"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
+    "nhooyr.io/websocket/wsjson"
 )
 
 const (
@@ -39,7 +41,7 @@ func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, prox
 		estMsg.DataBase64 = base64.StdEncoding.EncodeToString(firstSendData)
 	}
 	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: estMsg}
-	if err := wsc.WriteWSJSON(&addrSend); err != nil {
+    if err := wsjson.Write(context.TODO(), wsc.WsConn, &addrSend); err != nil {
 		log.Error("json error:", err)
 		return err
 	}

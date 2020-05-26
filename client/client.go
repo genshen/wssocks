@@ -7,7 +7,6 @@ import (
 	"github.com/genshen/cmds"
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/term_view"
-	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+    "time"
 )
 
 const CommandNameClient = "client"
@@ -85,22 +85,24 @@ func (c *client) Run() error {
 		"remote": c.remoteUrl.String(),
 	}).Info("connecting to wssocks server.")
 
-	dialer := websocket.DefaultDialer
 	wsHeader := make(http.Header) // header in websocket request(default is nil)
 
 	if c.key != "" {
 		wsHeader.Set("Key", c.key)
 	}
 
+	httpClient := http.Client{}
 	// loading and execute plugin
 	if clientPlugin.HasRedirectPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
-		if err := clientPlugin.RedirectPlugin.BeforeRequest(dialer, c.remoteUrl, wsHeader); err != nil {
+        if err := clientPlugin.RedirectPlugin.BeforeRequest(&httpClient, c.remoteUrl, &wsHeader); err != nil {
 			return err
 		}
 	}
 
-	wsc, err := wss.NewWebSocketClient(websocket.DefaultDialer, c.remoteUrl.String(), wsHeader)
+    ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
+    defer cancel()
+    wsc, err := wss.NewWebSocketClient(ctx, c.remoteUrl.String(), &httpClient, wsHeader)
 	if err != nil {
 		log.Fatal("establishing connection error:", err)
 	}
@@ -111,7 +113,7 @@ func (c *client) Run() error {
 	defer wsc.WSClose()
 
 	// negotiate version
-	if version, err := wss.ExchangeVersion(wsc.WsConn); err != nil {
+    if version, err := wss.ExchangeVersion(ctx, wsc.WsConn); err != nil {
 		return err
 	} else {
 		if clientPlugin.HasVersionPlugin() {
@@ -164,7 +166,7 @@ func (c *client) Run() error {
 	go func() {
 		defer once.Do(closeAll)
 		defer wg.Done()
-		if err := wsc.ListenIncomeMsg(); err != nil {
+        if err := wsc.ListenIncomeMsg(context.TODO()); err != nil {
 			log.Error("error websocket read:", err)
 		}
 	}()
