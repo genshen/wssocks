@@ -1,11 +1,13 @@
 package wss
 
 import (
+    "context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	"net/http"
+    "nhooyr.io/websocket"
+    "nhooyr.io/websocket/wsjson"
 	"sync"
 )
 
@@ -16,7 +18,7 @@ type WebSocketClient struct {
 	ConcurrentWebSocket
 	proxies map[ksuid.KSUID]*ProxyClient // all proxies on this websocket.
 	proxyMu sync.RWMutex                 // mutex to operate proxies map.
-	stop    chan interface{}
+    cancel context.CancelFunc
 }
 
 // get the connection size
@@ -28,15 +30,14 @@ func (wsc *WebSocketClient) ConnSize() int {
 
 // Establish websocket connection.
 // And initialize proxies container.
-func NewWebSocketClient(dialer *websocket.Dialer, addr string, header http.Header) (*WebSocketClient, error) {
+func NewWebSocketClient(ctx context.Context, addr string, hc *http.Client, header http.Header) (*WebSocketClient, error) {
 	var wsc WebSocketClient
-	ws, _, err := dialer.Dial(addr, header)
+    ws, _, err := websocket.Dial(ctx, addr, &websocket.DialOptions{HTTPClient: hc, HTTPHeader: header})
 	if err != nil {
 		return nil, err
 	}
 	wsc.WsConn = ws
 	wsc.proxies = make(map[ksuid.KSUID]*ProxyClient)
-	wsc.stop = make(chan interface{})
 	return &wsc, nil
 }
 
@@ -70,7 +71,7 @@ func (wsc *WebSocketClient) TellClose(id ksuid.KSUID) error {
 		Type: WsTpClose,
 		Data: nil,
 	}
-	if err := wsc.WriteWSJSON(&finish); err != nil {
+    if err := wsjson.Write(context.TODO(), wsc.WsConn, &finish); err != nil {
 		return err
 	}
 	return nil
@@ -87,16 +88,19 @@ func (wsc *WebSocketClient) RemoveProxy(id ksuid.KSUID) {
 
 // listen income websocket messages and dispatch to different proxies.
 func (wsc *WebSocketClient) ListenIncomeMsg() error {
+    ctx, can := context.WithCancel(context.Background())
+    wsc.cancel = can
+
 	for {
 		// check stop first
 		select {
-		case <-wsc.stop:
+        case <-ctx.Done():
 			return StoppedError
 		default:
 			// if the channel is still open, continue as normal
 		}
 
-		_, data, err := wsc.WsConn.ReadMessage()
+        _, data, err := wsc.WsConn.Read(ctx)
 		if err != nil {
 			// todo close all
 			return err // todo close websocket
@@ -138,7 +142,7 @@ func (wsc *WebSocketClient) ListenIncomeMsg() error {
 }
 
 func (wsc *WebSocketClient) Close() error {
-	close(wsc.stop)
+    wsc.cancel()
 	if err := wsc.WSClose(); err != nil {
 		return err
 	}

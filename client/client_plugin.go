@@ -2,7 +2,6 @@ package client
 
 import (
 	"github.com/genshen/wssocks/wss"
-	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
@@ -10,7 +9,7 @@ import (
 
 type ServerRedirect interface {
 	// in the plugin, we may add http header and modify remote address.
-	BeforeRequest(dialer *websocket.Dialer, url *url.URL, header http.Header) error
+    BeforeRequest(hc *http.Client, url *url.URL, header *http.Header) error
 }
 
 type VersionPlugin interface {

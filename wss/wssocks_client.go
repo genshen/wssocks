@@ -1,6 +1,7 @@
 package wss
 
 import (
+    "context"
 	"errors"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
@@ -153,7 +154,7 @@ func (client *Client) transData(wsc *WebSocketClient, conn *net.TCPConn, firstSe
 
 	// trans incoming data from proxy client application.
 	go func() {
-		writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id}
+        writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id, Ctx: context.TODO()}
 		if _, err := io.Copy(&writer, conn); err != nil {
 			log.Error("write error:", err)
 		}

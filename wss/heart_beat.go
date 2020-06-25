@@ -1,20 +1,24 @@
 package wss
 
 import (
+    "context"
 	"github.com/segmentio/ksuid"
+    "nhooyr.io/websocket/wsjson"
 	"time"
 )
 
 type HeartBeat struct {
 	wsc      *WebSocketClient
-	done     chan bool
+    cancel   context.CancelFunc
 	isClosed bool
 }
 
-func NewHeartBeat(wsc *WebSocketClient) *HeartBeat {
+func NewHeartBeat(wsc *WebSocketClient) (*HeartBeat, context.Context) {
 	hb := HeartBeat{wsc: wsc, isClosed: false}
-	hb.done = make(chan bool)
-	return &hb
+    ctx, can := context.WithCancel(context.Background())
+
+    hb.cancel = can
+    return &hb, ctx
 }
 
 // close heartbeat sending
@@ -22,17 +26,17 @@ func (hb *HeartBeat) Close() {
 	if hb.isClosed {
 		return
 	}
-	hb.done <- true
-	close(hb.done)
+    hb.isClosed = true
+    hb.cancel()
 }
 
 // start sending heart beat to server.
-func (hb *HeartBeat) Start() error {
+func (hb *HeartBeat) Start(ctx context.Context) error {
 	t := time.NewTicker(time.Second * 15)
 	defer t.Stop()
 	for {
 		select {
-		case <-hb.done:
+        case <-ctx.Done():
 			return nil
 		case <-t.C:
 			heartBeats := WebSocketMessage{
@@ -40,7 +44,7 @@ func (hb *HeartBeat) Start() error {
 				Type: WsTpBeats,
 				Data: nil,
 			}
-			if err := hb.wsc.WriteWSJSON(heartBeats); err != nil {
+            if err := wsjson.Write(context.TODO(), hb.wsc.WsConn, heartBeats); err != nil {
 				return err
 			}
 		}

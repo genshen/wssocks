@@ -3,16 +3,17 @@ package wss
 import (
 	"bufio"
 	"bytes"
+    "context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
 	"net/http"
+    "nhooyr.io/websocket"
 	"time"
 )
 
@@ -22,7 +23,7 @@ type Connector struct {
 
 // interface of establishing proxy connection with target
 type ProxyEstablish interface {
-    establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error
+    establish(ctx context.Context, hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error
 
     // data from client todo data with type
     onData(data ClientData) error
@@ -34,8 +35,8 @@ type ProxyEstablish interface {
 
 type ClientData ServerData
 
-func dispatchMessage(hub *Hub, msgType int, data []byte, config WebsocksServerConfig) error {
-    if msgType == websocket.TextMessage {
+func dispatchMessage(hub *Hub, msgType websocket.MessageType, data []byte, config WebsocksServerConfig) error {
+    if msgType == websocket.MessageText {
 		return dispatchDataMessage(hub, data, config)
 	}
 	return nil
@@ -112,7 +113,9 @@ func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
 	} else {
         e = &DefaultProxyEst{}
     }
-    if err := e.establish(hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData); err != nil {
+
+    ctx, _ := context.WithCancel(context.Background())
+    if err := e.establish(ctx, hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData); err != nil {
         log.Error(err) // todo error handle better way
     }
 	//	log.WithField("size", s.GetConnectorSize()).Trace("connection size changed.")
@@ -144,7 +147,7 @@ func (e *DefaultProxyEst) onClosed(tell bool) error {
 }
 
 // data: data send in establish step (can be nil).
-func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error {
+func (e *DefaultProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error {
     conn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
 	if err != nil {
 		return err
@@ -161,17 +164,17 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 
 	switch proxyType {
 	case ProxyTypeSocks5:
-		if err := hub.WriteProxyMessage(id, TagData, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
+        if err := hub.WriteProxyMessage(ctx, id, TagData, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 			return err
 		}
 	case ProxyTypeHttps:
-		if err := hub.WriteProxyMessage(id, TagData, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: wssocks\r\n\r\n")); err != nil {
+        if err := hub.WriteProxyMessage(ctx, id, TagData, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: wssocks\r\n\r\n")); err != nil {
 			return err
 		}
 	}
 
 	go func() {
-		writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id}
+        writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.TODO()}
         if _, err := io.Copy(&writer, conn); err != nil {
 			log.Error("copy error,", err)
 		}
@@ -205,10 +208,10 @@ func (h *HttpProxyEst) onClosed(tell bool) error {
     return h.bodyReadCloser.Close() // close from client
 }
 
-func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, header []byte) error {
+func (h *HttpProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, proxyType int, addr string, header []byte) error {
 	if header == nil {
 		hub.tellClose <- id
-		_ = hub.WriteProxyMessage(id, TagEstErr, nil)
+        _ = hub.WriteProxyMessage(ctx, id, TagEstErr, nil)
 		return errors.New("http header empty")
 	}
 
@@ -226,7 +229,7 @@ func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr s
 		}
 	}()
 
-	if err := hub.WriteProxyMessage(id, TagEstOk, nil); err != nil {
+    if err := hub.WriteProxyMessage(ctx, id, TagEstOk, nil); err != nil {
 		return err
 	}
 
@@ -245,7 +248,7 @@ func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr s
 	}
 	defer resp.Body.Close()
 
-	writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id}
+    writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.TODO()}
 	var headerBuffer bytes.Buffer
 	HttpRespHeader(&headerBuffer, resp)
 	writer.Write(headerBuffer.Bytes())

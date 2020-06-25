@@ -1,13 +1,12 @@
 package wss
 
 import (
-	"github.com/gorilla/websocket"
+    "context"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
+    "nhooyr.io/websocket"
 )
-
-var upgrader = websocket.Upgrader{} // use default options
 
 type WebsocksServerConfig struct {
 	EnableHttp    bool
@@ -28,33 +27,26 @@ func ServeWsWrapper(config WebsocksServerConfig) func(w http.ResponseWriter, r *
 }
 
 func serveWs(w http.ResponseWriter, r *http.Request, config WebsocksServerConfig) {
-	ws, err := upgrader.Upgrade(w, r, nil)
+    wc, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		log.Error(err)
-		return
 	}
-	if _, ok := err.(websocket.HandshakeError); ok {
-		http.Error(w, "Not a websocket handshake", 400)
-		log.Error("Not a websocket handshake", 400)
-		return
-	} else if err != nil {
-		http.Error(w, "Cannot setup WebSocket connection:", 400)
-		log.Error("Cannot setup WebSocket connection:", err)
-		return
-	}
-	defer ws.Close()
+    defer wc.Close(websocket.StatusNormalClosure, "the sky is falling")
+
+    ctx, cancel := context.WithCancel(r.Context())
+    defer cancel()
 
 	// negotiate version with client.
-	if err := NegVersionServer(ws); err != nil {
+    if err := NegVersionServer(ctx, wc); err != nil {
 		return
 	}
 
-	hub := NewHub(ws)
+    hub := NewHub(ctx, wc)
 	defer hub.Close()
     go hub.Run()
 	// read messages from webSocket
 	for {
-		msgType, p, err := ws.ReadMessage()
+        msgType, p, err := wc.Read(ctx) // fixme context
 		// if WebSocket is closed by some reason, then this func will return,
 		// and 'done' channel will be set, the outer func will reach to the end.
 		if err != nil && err != io.EOF {
