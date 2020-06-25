@@ -52,6 +52,13 @@ func NewHub(ctx context.Context, conn *websocket.Conn) *Hub {
 }
 
 func (h *Hub) Close() {
+    // if there are connections, close them.
+    h.mu.Lock()
+    defer h.mu.Unlock()
+    for id, proxy := range h.connPool {
+        proxy.ProxyIns.Close(false)
+        delete(h.connPool, id)
+    }
     close(h.est)
     close(h.register)
     close(h.unregister)
@@ -77,7 +84,7 @@ func (h *Hub) Run() {
                 break
             }
             if proxy := h.GetProxyById(id); proxy != nil {
-                proxy.ProxyIns.onClosed(false) // todo remove proxy here
+                proxy.ProxyIns.Close(false) // todo remove proxy here
             }
         case id := <-h.tellClose: // send close message to proxy client
             h.tellClosed(id)
@@ -112,15 +119,6 @@ func (h *Hub) RemoveProxy(id ksuid.KSUID) {
     h.mu.Lock()
     defer h.mu.Unlock()
     if _, ok := h.connPool[id]; ok {
-        delete(h.connPool, id)
-    }
-}
-
-// remove all connections in pool
-func (h *Hub) RemoveAll() {
-    h.mu.Lock()
-    defer h.mu.Unlock()
-    for id := range h.connPool {
         delete(h.connPool, id)
     }
 }

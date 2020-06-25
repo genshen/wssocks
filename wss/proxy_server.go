@@ -30,7 +30,7 @@ type ProxyEstablish interface {
 
     // close connection
     // tell: whether to send close message to proxy client
-    onClosed(tell bool) error
+    Close(tell bool) error
 }
 
 type ClientData ServerData
@@ -141,7 +141,7 @@ func (e *DefaultProxyEst) onData(data ClientData) error {
     return nil
 }
 
-func (e *DefaultProxyEst) onClosed(tell bool) error {
+func (e *DefaultProxyEst) Close(tell bool) error {
     e.done <- ChanDone{tell, nil}
     return nil // todo error
 }
@@ -204,7 +204,7 @@ func (h *HttpProxyEst) onData(data ClientData) error {
     return nil
 }
 
-func (h *HttpProxyEst) onClosed(tell bool) error {
+func (h *HttpProxyEst) Close(tell bool) error {
     return h.bodyReadCloser.Close() // close from client
 }
 
