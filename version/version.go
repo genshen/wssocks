@@ -8,6 +8,8 @@ import (
 )
 
 const VERSION = wss.CoreVersion
+var buildHash = "none"
+var buildTime = "none"
 
 var versionCommand = &cmds.Command{
 	Name:        "version",
@@ -32,9 +34,11 @@ func (v *version) PreRun() error {
 }
 
 func (v *version) Run() error {
-	fmt.Printf("version\t %s.\n", VERSION)
-	fmt.Printf("protocol version\t %d\n", wss.VersionCode)
-	fmt.Println("Author\t genshen<genshenchu@gmail.com>")
-	fmt.Println("github \t https://github.com/genshen/wssocks")
+	fmt.Printf("version: %s.\n", VERSION)
+	fmt.Printf("protocol version: %d\n", wss.VersionCode)
+	fmt.Printf("commit: %s\n", buildHash)
+	fmt.Printf("build time: %s\n", buildTime)
+	fmt.Println("Author: genshen<genshenchu@gmail.com>")
+	fmt.Println("github: https://github.com/genshen/wssocks")
 	return nil
 }
