@@ -35,6 +35,8 @@ type ProxyEstablish interface {
 
 type ClientData ServerData
 
+var ConnCloseByClient = errors.New("conn closed by client")
+
 func dispatchMessage(hub *Hub, msgType websocket.MessageType, data []byte, config WebsocksServerConfig) error {
     if msgType == websocket.MessageText {
 		return dispatchDataMessage(hub, data, config)
@@ -115,11 +117,14 @@ func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
     }
 
     ctx, _ := context.WithCancel(context.Background())
-    if err := e.establish(ctx, hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData); err != nil {
+    err := e.establish(ctx, hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData)
+    if err == nil {
+        hub.tellClose <- proxyMeta.id // tell client to close connection.
+    } else if err != ConnCloseByClient {
         log.Error(err) // todo error handle better way
     }
+    return
 	//	log.WithField("size", s.GetConnectorSize()).Trace("connection size changed.")
-	hub.tellClose <- proxyMeta.id // tell client to close connection.
 }
 
 // data type used in DefaultProxyEst to pass data to channel
@@ -142,7 +147,7 @@ func (e *DefaultProxyEst) onData(data ClientData) error {
 }
 
 func (e *DefaultProxyEst) Close(tell bool) error {
-    e.done <- ChanDone{tell, nil}
+    e.done <- ChanDone{tell, ConnCloseByClient}
     return nil // todo error
 }
 
@@ -184,10 +189,7 @@ func (e *DefaultProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUI
     d := <-e.done
 	// s.RemoveProxy(proxy.Id)
 	// tellClosed is called outside this func.
-	if d.err != nil {
-		return d.err
-	}
-	return nil
+	return d.err
 }
 
 type HttpProxyEst struct {
