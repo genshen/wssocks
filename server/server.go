@@ -64,7 +64,8 @@ func (s *server) PreRun() error {
 
 func (s *server) Run() error {
 	config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey}
-	http.HandleFunc("/", wss.ServeWsWrapper(config))
+    hc := wss.NewHubCollection()
+    http.HandleFunc("/", wss.ServeWsWrapper(hc, config))
 	if s.authEnable {
 		log.Info("connection authentication key: ", s.authKey)
 	}

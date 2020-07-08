@@ -15,18 +15,18 @@ type WebsocksServerConfig struct {
 }
 
 // return a a function handling websocket requests from the peer.
-func ServeWsWrapper(config WebsocksServerConfig) func(w http.ResponseWriter, r *http.Request) {
+func ServeWsWrapper(hc *HubCollection, config WebsocksServerConfig) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if config.EnableConnKey && r.Header.Get("Key") != config.ConnKey {
 			w.WriteHeader(401)
 			w.Write([]byte("Access denied!\n"))
 			return
 		}
-		serveWs(w, r, config)
+		serveWs(w, r, hc, config)
 	}
 }
 
-func serveWs(w http.ResponseWriter, r *http.Request, config WebsocksServerConfig) {
+func serveWs(w http.ResponseWriter, r *http.Request, hc *HubCollection, config WebsocksServerConfig) {
     wc, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		log.Error(err)
@@ -41,7 +41,8 @@ func serveWs(w http.ResponseWriter, r *http.Request, config WebsocksServerConfig
 		return
 	}
 
-    hub := NewHub(ctx, wc)
+	hub := hc.AddHub(wc)
+	defer hc.RemoveProxy(hub.id)
 	defer hub.Close()
     go hub.Run()
 	// read messages from webSocket

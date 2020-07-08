@@ -3,7 +3,6 @@ package wss
 import (
     "context"
     "github.com/segmentio/ksuid"
-    "nhooyr.io/websocket"
     "nhooyr.io/websocket/wsjson"
     "sync"
 )
@@ -15,6 +14,7 @@ type ProxyServer struct {
 
 // Hub maintains the set of active proxy clients in server side for a user
 type Hub struct {
+    id ksuid.KSUID
     ConcurrentWebSocket
     // Registered proxy connections.
     connPool map[ksuid.KSUID]*ProxyServer
@@ -40,16 +40,6 @@ type ProxyRegister struct {
     withData []byte
 }
 
-func NewHub(ctx context.Context, conn *websocket.Conn) *Hub {
-    return &Hub{
-        ConcurrentWebSocket: ConcurrentWebSocket{WsConn: conn},
-        est:                 make(chan ProxyRegister),
-        register:            make(chan *ProxyServer),
-        unregister:          make(chan ksuid.KSUID),
-        connPool:            make(map[ksuid.KSUID]*ProxyServer),
-        tellClose:           make(chan ksuid.KSUID),
-    }
-}
 
 func (h *Hub) Close() {
     // if there are connections, close them.
