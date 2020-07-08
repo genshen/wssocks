@@ -122,6 +122,7 @@ func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
         hub.tellClosed(proxyMeta.id) // tell client to close connection.
     } else if err != ConnCloseByClient {
         log.Error(err) // todo error handle better way
+        hub.tellClosed(proxyMeta.id)
     }
     return
 	//	log.WithField("size", s.GetConnectorSize()).Trace("connection size changed.")
@@ -228,7 +229,7 @@ func (h *HttpProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, 
 	defer hub.RemoveProxy(id)
 	defer func() {
 		if !bodyReadCloser.isClosed() { // if it is not closed by client.
-            hub.tellClosed(id)
+            hub.tellClosed(id) // todo
 		}
 	}()
 
