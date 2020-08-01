@@ -33,7 +33,6 @@ func (hc *HubCollection) AddHub(conn *websocket.Conn) *Hub {
         register:            make(chan *ProxyServer),
         unregister:          make(chan ksuid.KSUID),
         connPool:            make(map[ksuid.KSUID]*ProxyServer),
-        tellClose:           make(chan ksuid.KSUID),
     }
 
     hc.hubs[hub.id] = &hub

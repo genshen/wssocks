@@ -119,9 +119,10 @@ func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
     ctx, _ := context.WithCancel(context.Background())
     err := e.establish(ctx, hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData)
     if err == nil {
-        hub.tellClose <- proxyMeta.id // tell client to close connection.
+        hub.tellClosed(proxyMeta.id) // tell client to close connection.
     } else if err != ConnCloseByClient {
         log.Error(err) // todo error handle better way
+        hub.tellClosed(proxyMeta.id)
     }
     return
 	//	log.WithField("size", s.GetConnectorSize()).Trace("connection size changed.")
@@ -182,6 +183,7 @@ func (e *DefaultProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUI
         writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.TODO()}
         if _, err := io.Copy(&writer, conn); err != nil {
 			log.Error("copy error,", err)
+            e.done <- ChanDone{true, err}
 		}
         e.done <- ChanDone{true, nil}
 	}()
@@ -212,7 +214,7 @@ func (h *HttpProxyEst) Close(tell bool) error {
 
 func (h *HttpProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, proxyType int, addr string, header []byte) error {
 	if header == nil {
-		hub.tellClose <- id
+        hub.tellClosed(id)
         _ = hub.WriteProxyMessage(ctx, id, TagEstErr, nil)
 		return errors.New("http header empty")
 	}
@@ -227,7 +229,7 @@ func (h *HttpProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, 
 	defer hub.RemoveProxy(id)
 	defer func() {
 		if !bodyReadCloser.isClosed() { // if it is not closed by client.
-			hub.tellClose <- id
+            hub.tellClosed(id) // todo
 		}
 	}()
 

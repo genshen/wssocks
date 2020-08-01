@@ -28,8 +28,6 @@ type Hub struct {
     // Unregister requests from clients.
     unregister chan ksuid.KSUID
 
-    tellClose chan ksuid.KSUID
-
     mu sync.RWMutex
 }
 
@@ -52,7 +50,6 @@ func (h *Hub) Close() {
     close(h.est)
     close(h.register)
     close(h.unregister)
-    close(h.tellClose)
 }
 
 func (h *Hub) Run() {
@@ -76,8 +73,6 @@ func (h *Hub) Run() {
             if proxy := h.GetProxyById(id); proxy != nil {
                 proxy.ProxyIns.Close(false) // todo remove proxy here
             }
-        case id := <-h.tellClose: // send close message to proxy client
-            h.tellClosed(id)
         }
     }
 }
