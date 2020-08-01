@@ -176,7 +176,7 @@ func (c *client) Run() error {
 	go func() {
 		defer wg.Done()
         defer once.Do(closeAll)
-        if err := hdl.hb.Start(hbCtx); err != nil {
+        if err := hdl.hb.Start(hbCtx, time.Minute); err != nil {
 			log.Info("heartbeat ending", err)
 		}
 	}()

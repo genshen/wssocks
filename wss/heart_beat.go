@@ -31,7 +31,7 @@ func (hb *HeartBeat) Close() {
 }
 
 // start sending heart beat to server.
-func (hb *HeartBeat) Start(ctx context.Context) error {
+func (hb *HeartBeat) Start(ctx context.Context, writeTimeout time.Duration) error {
 	t := time.NewTicker(time.Second * 15)
 	defer t.Stop()
 	for {
@@ -44,7 +44,8 @@ func (hb *HeartBeat) Start(ctx context.Context) error {
 				Type: WsTpBeats,
 				Data: nil,
 			}
-            if err := wsjson.Write(context.TODO(), hb.wsc.WsConn, heartBeats); err != nil {
+            writeCtx, _ := context.WithTimeout(ctx, writeTimeout)
+            if err := wsjson.Write(writeCtx, hb.wsc.WsConn, heartBeats); err != nil {
 				return err
 			}
 		}
