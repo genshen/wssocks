@@ -87,9 +87,10 @@ func (wsc *WebSocketClient) RemoveProxy(id ksuid.KSUID) {
 }
 
 // listen income websocket messages and dispatch to different proxies.
-func (wsc *WebSocketClient) ListenIncomeMsg() error {
+func (wsc *WebSocketClient) ListenIncomeMsg(readLimit int64) error {
     ctx, can := context.WithCancel(context.Background())
     wsc.cancel = can
+	wsc.WsConn.SetReadLimit(readLimit)
 
 	for {
 		// check stop first

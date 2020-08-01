@@ -166,7 +166,7 @@ func (c *client) Run() error {
 	go func() {
 		defer wg.Done()
         defer once.Do(closeAll)
-        if err := wsc.ListenIncomeMsg(); err != nil {
+        if err := wsc.ListenIncomeMsg(1 << 29); err != nil {
 			log.Error("error websocket read:", err)
 		}
 	}()
