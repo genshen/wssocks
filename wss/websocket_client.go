@@ -9,6 +9,7 @@ import (
     "nhooyr.io/websocket"
     "nhooyr.io/websocket/wsjson"
 	"sync"
+    "time"
 )
 
 // WebSocketClient is a collection of proxy clients.
@@ -71,7 +72,9 @@ func (wsc *WebSocketClient) TellClose(id ksuid.KSUID) error {
 		Type: WsTpClose,
 		Data: nil,
 	}
-    if err := wsjson.Write(context.TODO(), wsc.WsConn, &finish); err != nil {
+    ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+    defer cancel()
+    if err := wsjson.Write(ctx, wsc.WsConn, &finish); err != nil {
 		return err
 	}
 	return nil
