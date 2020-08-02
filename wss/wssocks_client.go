@@ -99,14 +99,14 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 		}
 
 		go func() {
-			defer c.Close()
+            conn := c.(*net.TCPConn)
+            // defer c.Close()
+            defer conn.Close()
 			// In reply, we can get proxy type, target address and first send data.
-			firstSendData, proxyType, addr, err := client.Reply(c, enableHttp)
+            firstSendData, proxyType, addr, err := client.Reply(conn, enableHttp)
 			if err != nil {
 				log.Error(err)
 			}
-			conn := c.(*net.TCPConn)
-			defer conn.Close()
 			client.wgClose.Add(1)
 			defer client.wgClose.Done()
 
