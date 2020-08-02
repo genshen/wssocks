@@ -2,6 +2,7 @@ import React from 'react'
 import { Text, Pane, Popover, Position, Button, toaster, IconProps } from 'evergreen-ui'
 import { DuplicateIcon, IconButton, KeyIcon, MoreIcon, LockIcon, DisableIcon, InfoSignIcon, TickCircleIcon } from 'evergreen-ui'
 import { Row, Col } from 'react-grid-system'
+import CopyToClipboard from 'react-copy-to-clipboard'
 
 import MoreVersionInfo from './MoreVersionInfo'
 import { Info } from './Status'
@@ -65,6 +66,7 @@ function InfoBoard(props: InfoBoardProps) {
     )
   }
 
+  const server_host = (props.data.ssl_enabled ? 'wss' : 'ws') + '://' + window.location.host
   return (
     <Pane alignItems="center">
       {/* flex={1} display="flex" justifyContent="space-between" */}
@@ -85,8 +87,10 @@ function InfoBoard(props: InfoBoardProps) {
         <Col xs={12} sm={6} md={4} lg={3}>
           <Pane marginLeft="32px" display="flex" justifyContent="left" alignItems="center" flexDirection="row">
             <Text margin="8px"> Address</Text>
-            <Text color="selected"> ws://gensh.me </Text>
-            <IconButton icon={DuplicateIcon} appearance="minimal" marginLeft="4px" onClick={() => onCopyAddr("ws://proxy.gensh.me")} >Minimal</IconButton>
+            <Text color="selected"> {server_host} </Text>
+            <CopyToClipboard text={server_host} onCopy={() => onCopyAddr(server_host)}>
+              <IconButton icon={DuplicateIcon} appearance="minimal" marginLeft="4px" >Minimal</IconButton>
+            </CopyToClipboard>
           </Pane>
         </Col>
         <Col xs={12} sm={6} md={4} lg={3}>
