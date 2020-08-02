@@ -4,6 +4,7 @@ import (
     "encoding/json"
     "github.com/genshen/wssocks/wss"
     "net/http"
+    "time"
 )
 
 type Version struct {
@@ -25,7 +26,9 @@ type Info struct {
 }
 
 type Statistics struct {
-    UpDays int `json:"up_days"`
+    UpTime  float64 `json:"up_time"`
+    Clients int     `json:"clients"`
+    Proxies int     `json:"proxies"`
 }
 
 type Status struct {
@@ -36,16 +39,28 @@ type Status struct {
 type handleStatus struct {
     enableHttp    bool
     enableConnKey bool
+    hc            *wss.HubCollection
+    setupTime     time.Time
 }
 
-func NewStatusHandle(enableHttp bool, enableConnKey bool) *handleStatus {
-    return &handleStatus{enableHttp: enableHttp, enableConnKey: enableConnKey}
+// create a http handle for handling service status
+func NewStatusHandle(hc *wss.HubCollection, enableHttp bool, enableConnKey bool) *handleStatus {
+    return &handleStatus{
+        hc:            hc,
+        enableHttp:    enableHttp,
+        enableConnKey: enableConnKey,
+        setupTime:     time.Now(),
+    }
 }
 
 func (s *handleStatus) ServeHTTP(w http.ResponseWriter, req *http.Request) {
     w.Header().Set("Access-Control-Allow-Origin", "*") // todo: remove in production env
     w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
     w.Header().Set("Content-Type", "application/json")
+
+    clients, proxies := s.hc.GetConnCount()
+    duration := time.Now().Sub(s.setupTime).Truncate(time.Second)
+
     status := Status{
         Info: Info{
             Version: Version{
@@ -61,7 +76,9 @@ func (s *handleStatus) ServeHTTP(w http.ResponseWriter, req *http.Request) {
             SSLDisableReason:    "not support", // todo ssl support
         },
         Statistics: Statistics{
-            UpDays: 1,
+            UpTime:  duration.Seconds(),
+            Clients: clients,
+            Proxies: proxies,
         },
     }
 

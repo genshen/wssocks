@@ -67,7 +67,7 @@ func (s *server) Run() error {
 	config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey}
     hc := wss.NewHubCollection()
     http.HandleFunc("/", wss.ServeWsWrapper(hc, config))
-    http.Handle("/api/status/", status.NewStatusHandle(s.http, s.authEnable))
+    http.Handle("/api/status/", status.NewStatusHandle(hc, s.http, s.authEnable))
 	if s.authEnable {
 		log.Info("connection authentication key: ", s.authKey)
 	}

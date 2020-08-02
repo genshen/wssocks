@@ -17,7 +17,9 @@ export interface Info {
 }
 
 export interface Statistics {
-    updays: number
+    up_time: number
+    clients: number
+    proxies: number
 }
 
 export interface WssosksStatus {
