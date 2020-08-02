@@ -1,8 +1,13 @@
 import React from 'react';
 import { Pane, Button, Strong, UnorderedList, ListItem, Badge, Text, Heading, SwapHorizontalIcon } from 'evergreen-ui'
 import { ChangesIcon, ApplicationsIcon, TickCircleIcon, BanCircleIcon, } from 'evergreen-ui'
+import { Statistics } from './Status';
 
-function StatisticsBoard() {
+interface InfoBoardProps {
+  data: Statistics
+}
+
+function StatisticsBoard(props: InfoBoardProps) {
   const list_title_size = "150px"
   return (
     <UnorderedList>

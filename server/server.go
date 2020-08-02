@@ -6,6 +6,7 @@ import (
 	"flag"
 	"github.com/genshen/cmds"
 	"github.com/genshen/wssocks/wss"
+	"github.com/genshen/wssocks/wss/status"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
@@ -66,6 +67,7 @@ func (s *server) Run() error {
 	config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey}
     hc := wss.NewHubCollection()
     http.HandleFunc("/", wss.ServeWsWrapper(hc, config))
+    http.Handle("/api/status/", status.NewStatusHandle(s.http, s.authEnable))
 	if s.authEnable {
 		log.Info("connection authentication key: ", s.authKey)
 	}
