@@ -1,4 +1,7 @@
 # wssocks
+
+![build](https://github.com/genshen/wssocks/workflows/Go/badge.svg)
+
 > socks5 over websocket.
 
 wssocks can proxy TCP and UDP(not implemented currently) connections via socks5. But the socks5 data is wrapped in websockets and then sent to server.
