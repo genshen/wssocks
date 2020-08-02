@@ -31,14 +31,17 @@ func (wsc *WebSocketClient) ConnSize() int {
 // Establish websocket connection.
 // And initialize proxies container.
 func NewWebSocketClient(ctx context.Context, addr string, hc *http.Client, header http.Header) (*WebSocketClient, error) {
-	var wsc WebSocketClient
     ws, _, err := websocket.Dial(ctx, addr, &websocket.DialOptions{HTTPClient: hc, HTTPHeader: header})
 	if err != nil {
 		return nil, err
 	}
-	wsc.WsConn = ws
-	wsc.proxies = make(map[ksuid.KSUID]*ProxyClient)
-	return &wsc, nil
+    return &WebSocketClient{
+        ConcurrentWebSocket: ConcurrentWebSocket{
+            WsConn: ws,
+        },
+        cancel:  nil,
+        proxies: make(map[ksuid.KSUID]*ProxyClient),
+	}, nil
 }
 
 // create a new proxy with unique id
@@ -143,7 +146,9 @@ func (wsc *WebSocketClient) ListenIncomeMsg(readLimit int64) error {
 }
 
 func (wsc *WebSocketClient) Close() error {
-    wsc.cancel()
+    if wsc.cancel != nil {
+        wsc.cancel()
+    }
 	if err := wsc.WSClose(); err != nil {
 		return err
 	}
