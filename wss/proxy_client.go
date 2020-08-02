@@ -3,6 +3,8 @@ package wss
 import (
     "context"
 	"encoding/base64"
+    "time"
+
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
     "nhooyr.io/websocket/wsjson"
@@ -28,8 +30,8 @@ type ServerData struct {
 	Data []byte
 }
 
-// handel socket dial results processing
-// copy income connection data to proxy serve via websocket
+// tell wssocks proxy server to establish a proxy connection by sending server 
+// proxy address, type, initial data.
 func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, proxyType int, addr string) error {
 	estMsg := ProxyEstMessage{
 		Type:     proxyType,
@@ -40,8 +42,14 @@ func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, prox
 		estMsg.WithData = true
 		estMsg.DataBase64 = base64.StdEncoding.EncodeToString(firstSendData)
 	}
-	addrSend := WebSocketMessage{Type: WsTpEst, Id: p.Id.String(), Data: estMsg}
-    if err := wsjson.Write(context.TODO(), wsc.WsConn, &addrSend); err != nil {
+
+    ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+    defer cancel()
+    if err := wsjson.Write(ctx, wsc.WsConn, &WebSocketMessage{
+        Type: WsTpEst,
+        Id:   p.Id.String(),
+        Data: estMsg,
+    }); err != nil {
 		log.Error("json error:", err)
 		return err
 	}
