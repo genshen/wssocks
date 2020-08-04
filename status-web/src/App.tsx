@@ -1,5 +1,5 @@
 import React from 'react'
-import { Pane, Text, Heading, Button, Popover, Position, GitRepoIcon, Link, Alert, Spinner } from 'evergreen-ui'
+import { Pane, Text, Heading, Button, GitRepoIcon, Link, Alert, Spinner } from 'evergreen-ui'
 import { Container, Row, Col } from 'react-grid-system'
 import useAxios from 'axios-hooks'
 
@@ -9,7 +9,7 @@ import InfoBoard from './InfoBoard'
 import { WssosksStatus } from './Status'
 
 function App() {
-  const [{ data, loading, error }, refetch] = useAxios<WssosksStatus>(
+  const [{ data, loading, error }, ] = useAxios<WssosksStatus>(
     window.location.protocol + "//" + window.location.host + "/status"
   )
 

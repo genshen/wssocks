@@ -1,5 +1,5 @@
 import React from 'react'
-import { Text, Pane, Popover, Position, Button, toaster, IconProps } from 'evergreen-ui'
+import { Text, Pane, Popover, Position, toaster, IconProps } from 'evergreen-ui'
 import { DuplicateIcon, IconButton, KeyIcon, MoreIcon, LockIcon, DisableIcon, InfoSignIcon, TickCircleIcon } from 'evergreen-ui'
 import { Row, Col } from 'react-grid-system'
 import CopyToClipboard from 'react-copy-to-clipboard'

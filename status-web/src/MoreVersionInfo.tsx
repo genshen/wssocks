@@ -1,6 +1,6 @@
 import React from 'react'
 
-import { Text, Pane, UnorderedList, ListItem, PropertyIcon, Strong, Small, InfoSignIcon, DotIcon } from 'evergreen-ui'
+import { Text, Pane, UnorderedList, ListItem, PropertyIcon, Strong, Small, DotIcon } from 'evergreen-ui'
 
 interface VersionProps {
   version_code: number

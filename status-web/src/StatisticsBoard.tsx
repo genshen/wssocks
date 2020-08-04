@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Pane, Button, Strong, UnorderedList, ListItem, Badge, Text, Heading, SwapHorizontalIcon } from 'evergreen-ui'
-import { ChangesIcon, ApplicationsIcon, TickCircleIcon, BanCircleIcon, } from 'evergreen-ui'
+import { Pane, Strong, UnorderedList, ListItem, Badge, Text, SwapHorizontalIcon } from 'evergreen-ui'
+import { ChangesIcon, ApplicationsIcon, TickCircleIcon } from 'evergreen-ui'
 import { Statistics } from './Status';
 
 interface InfoBoardProps {
