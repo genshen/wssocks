@@ -38,7 +38,6 @@ type ProxyRegister struct {
     withData []byte
 }
 
-
 func (h *Hub) Close() {
     // if there are connections, close them.
     h.mu.Lock()
@@ -93,9 +92,10 @@ func (h *Hub) GetProxyById(id ksuid.KSUID) *ProxyServer {
     return nil
 }
 
+// return the proxies handled by this hub/websocket connetion
 func (h *Hub) GetConnectorSize() int {
-    h.mu.RLock()
-    defer h.mu.RUnlock()
+    // h.mu.RLock()
+    // defer h.mu.RUnlock()
     return len(h.connPool)
 }
 

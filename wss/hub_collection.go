@@ -39,6 +39,19 @@ func (hc *HubCollection) AddHub(conn *websocket.Conn) *Hub {
     return &hub
 }
 
+// count the client size and proxy connection size.
+func (hc *HubCollection) GetConnCount() (int, int) {
+    hc.mutex.Lock()
+    defer hc.mutex.Unlock()
+    clients := len(hc.hubs)
+
+    connections := 0
+    for _, h := range hc.hubs {
+        connections += h.GetConnectorSize()
+    }
+    return clients, connections
+}
+
 // remove a hub specified by its id.
 func (hc *HubCollection) RemoveProxy(id ksuid.KSUID) {
     hc.mutex.Lock()

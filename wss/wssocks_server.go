@@ -9,9 +9,10 @@ import (
 )
 
 type WebsocksServerConfig struct {
-	EnableHttp    bool
-	EnableConnKey bool   // bale connection key
-	ConnKey       string // connection key
+    EnableHttp       bool
+    EnableConnKey    bool   // bale connection key
+    ConnKey          string // connection key
+    EnableStatusPage bool   // enable/disable status page
 }
 
 // return a a function handling websocket requests from the peer.
@@ -37,7 +38,7 @@ func serveWs(w http.ResponseWriter, r *http.Request, hc *HubCollection, config W
     defer cancel()
 
 	// negotiate version with client.
-    if err := NegVersionServer(ctx, wc); err != nil {
+    if err := NegVersionServer(ctx, wc, config.EnableStatusPage); err != nil {
 		return
 	}
 
