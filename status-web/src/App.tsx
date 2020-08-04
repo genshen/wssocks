@@ -10,7 +10,7 @@ import { WssosksStatus } from './Status'
 
 function App() {
   const [{ data, loading, error }, ] = useAxios<WssosksStatus>(
-    window.location.protocol + "//" + window.location.host + "/status"
+    window.location.protocol + "//" + window.location.host + "/api/status"
   )
 
   let content = null
