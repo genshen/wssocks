@@ -56,18 +56,18 @@ func (h *Hub) Run() {
         select {
         case estProxy, ok := <-h.est:
             if !ok {
-                break
+                return
             }
             go establishProxy(h, estProxy)
 
         case proxy, ok := <-h.register:
             if !ok {
-                break
+                return
             }
             h.addNewProxy(proxy)
         case id, ok := <-h.unregister:
             if !ok {
-                break
+                return
             }
             if proxy := h.GetProxyById(id); proxy != nil {
                 proxy.ProxyIns.Close(false) // todo remove proxy here
