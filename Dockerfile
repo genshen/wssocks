@@ -1,16 +1,29 @@
 # build method: just run `docker build --rm --build-arg -t genshen/wssocks .`
 
-FROM golang:1.13.8-alpine AS builder
+# build frontend code
+FROM node:12-alpine AS web-builder
 
-# set to 'on' if using go module
-ENV GO111MODULE=on
+COPY status-web web/
+
+RUN cd web \
+    && yarn install \
+    && yarn build
+
+## build go binary
+FROM golang:1.14.6-alpine AS builder
+
 ARG PACKAGE=github.com/genshen/wssocks
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git \
+    && go get -u github.com/rakyll/statik
 
 COPY ./  /go/src/${PACKAGE}/
+COPY --from=web-builder web/build /go/src/github.com/genshen/wssocks/web-build/
 
 RUN cd ./src/${PACKAGE} \
+    && cd server \
+    && statik -src=../web-build \
+    && cd ../ \
     && go build \
     && go install
 
