@@ -1,6 +1,7 @@
 {
   "name": "status-web",
   "version": "0.1.0",
+  "homepage": "/status",
   "private": false,
   "dependencies": {
     "@testing-library/jest-dom": "^4.2.4",

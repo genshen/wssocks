@@ -4,12 +4,15 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
+    "net/http"
+    "strings"
+
 	"github.com/genshen/cmds"
+    _ "github.com/genshen/wssocks/server/statik"
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/status"
+    "github.com/rakyll/statik/fs"
 	log "github.com/sirupsen/logrus"
-	"net/http"
-	"strings"
 )
 
 var serverCommand = &cmds.Command{
@@ -71,6 +74,11 @@ func (s *server) Run() error {
 
     http.HandleFunc("/", wss.ServeWsWrapper(hc, config))
     if s.status {
+        statikFS, err := fs.New()
+        if err != nil {
+            log.Fatal(err)
+        }
+        http.Handle("/status/", http.StripPrefix("/status", http.FileServer(statikFS)))
         http.Handle("/api/status/", status.NewStatusHandle(hc, s.http, s.authEnable))
     }
 
