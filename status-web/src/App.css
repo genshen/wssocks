@@ -14,5 +14,5 @@
 }
 
 .github-link {
- text-decoration: none;
+  text-decoration: none !important;
 }
