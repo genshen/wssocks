@@ -14,9 +14,13 @@ wssocks only create one TCP connection (websocket) per client to handle multiple
 - **Easy to use**  
 No configures, no dependences, just a single executable including client and server.
 
-## Install
-```
-go get -u github.com/genshen/wssocks
+## Build and install
+```bash
+cd status-web; yarn install; yarn build; cd ../
+go get -u github.com/rakyll/statik
+cd server; statik --src=../status-web/build/; cd ../
+go build
+go install
 ```
 You can also download it from [release](https://github.com/genshen/wssocks/releases) page.
 
