@@ -127,6 +127,8 @@ func (c *client) Run() error {
 				"version number":          version.Version,
 			}).Info("server version")
 
+            // client protocol version must eq or smaller than server version (newer client is not allowed)
+            // And, compatible version is the lowest version for client.
 			if version.CompVersion > wss.VersionCode || wss.VersionCode > version.VersionCode {
 				return errors.New("incompatible protocol version of client and server")
 			}
@@ -136,7 +138,17 @@ func (c *client) Run() error {
 					"server wssocks version": version.Version,
 				}).Warning("different version of client and server wssocks")
 			}
-		}
+            if version.EnableStatusPage {
+                if endpoint, err := url.Parse(c.remote + "/status"); err != nil {
+                    return err
+                } else {
+                    endpoint.Scheme = "http"
+                    log.WithFields(log.Fields{
+                        "endpoint": endpoint.String(),
+                    }).Infoln("server status is available, you can visit the endpoint to get status.")
+                }
+            }
+        }
 	}
 
 	var hdl Handles

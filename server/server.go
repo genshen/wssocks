@@ -69,7 +69,7 @@ func (s *server) PreRun() error {
 }
 
 func (s *server) Run() error {
-	config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey}
+    config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey, EnableStatusPage: s.status}
     hc := wss.NewHubCollection()
 
     http.HandleFunc("/", wss.ServeWsWrapper(hc, config))

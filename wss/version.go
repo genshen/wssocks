@@ -7,14 +7,15 @@ import (
 )
 
 // version of protocol.
-const VersionCode = 0x003
+const VersionCode = 0x004
 const CompVersion = 0x003
 const CoreVersion = "0.4.1"
 
 type VersionNeg struct {
-	Version     string `json:"version"`
-	CompVersion uint   `json:"comp_version"` // Compatible version code
-	VersionCode uint   `json:"version_code"`
+    Version           string `json:"version"`
+    CompVersion       uint   `json:"comp_version"` // Compatible version code
+    VersionCode       uint   `json:"version_code"`
+    EnableStatusPage  bool   `json:"status_page"`
 }
 
 // negotiate client and server version
@@ -33,13 +34,18 @@ func ExchangeVersion(ctx context.Context, wsConn *websocket.Conn) (VersionNeg, e
 }
 
 // send version information to client from server
-func NegVersionServer(ctx context.Context, wsConn *websocket.Conn) error {
+func NegVersionServer(ctx context.Context, wsConn *websocket.Conn, enableStatusPage bool) error {
 	// read from client
 	var versionClient VersionNeg
     if err := wsjson.Read(ctx, wsConn, &versionClient); err != nil {
 		return err
 	}
 	// send to client
-	versionServer := VersionNeg{Version: CoreVersion, CompVersion: CompVersion, VersionCode: VersionCode} // todo more information
+    versionServer := VersionNeg{
+        Version:     CoreVersion,
+        CompVersion: CompVersion,
+        VersionCode: VersionCode,
+        EnableStatusPage: enableStatusPage,
+    } // todo more information
     return wsjson.Write(ctx, wsConn, &versionServer)
 }
