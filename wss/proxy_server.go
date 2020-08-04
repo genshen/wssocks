@@ -23,7 +23,7 @@ type Connector struct {
 
 // interface of establishing proxy connection with target
 type ProxyEstablish interface {
-    establish(ctx context.Context, hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error
+    establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error
 
     // data from client todo data with type
     onData(data ClientData) error
@@ -116,8 +116,7 @@ func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
         e = &DefaultProxyEst{}
     }
 
-    ctx, _ := context.WithCancel(context.Background())
-    err := e.establish(ctx, hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData)
+    err := e.establish(hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData)
     if err == nil {
         hub.tellClosed(proxyMeta.id) // tell client to close connection.
     } else if err != ConnCloseByClient {
@@ -153,7 +152,7 @@ func (e *DefaultProxyEst) Close(tell bool) error {
 }
 
 // data: data send in establish step (can be nil).
-func (e *DefaultProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error {
+func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error {
     conn, err := net.DialTimeout("tcp", addr, time.Second*8) // todo config timeout
 	if err != nil {
 		return err
@@ -168,6 +167,8 @@ func (e *DefaultProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUI
     hub.register <- &ProxyServer{Id: id, ProxyIns: e}
 	defer hub.RemoveProxy(id)
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 	switch proxyType {
 	case ProxyTypeSocks5:
         if err := hub.WriteProxyMessage(ctx, id, TagData, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
@@ -180,7 +181,7 @@ func (e *DefaultProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUI
 	}
 
 	go func() {
-        writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.TODO()}
+        writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.Background()}
         if _, err := io.Copy(&writer, conn); err != nil {
 			log.Error("copy error,", err)
             e.done <- ChanDone{true, err}
@@ -212,9 +213,11 @@ func (h *HttpProxyEst) Close(tell bool) error {
     return h.bodyReadCloser.Close() // close from client
 }
 
-func (h *HttpProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, proxyType int, addr string, header []byte) error {
+func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, header []byte) error {
 	if header == nil {
         hub.tellClosed(id)
+        ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+        defer cancel()
         _ = hub.WriteProxyMessage(ctx, id, TagEstErr, nil)
 		return errors.New("http header empty")
 	}
@@ -233,7 +236,9 @@ func (h *HttpProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, 
 		}
 	}()
 
-    if err := hub.WriteProxyMessage(ctx, id, TagEstOk, nil); err != nil {
+    ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+    defer cancel()
+    if err := hub.ConcurrentWebSocket.WriteProxyMessage(ctx, id, TagEstOk, nil); err != nil {
 		return err
 	}
 
@@ -252,7 +257,7 @@ func (h *HttpProxyEst) establish(ctx context.Context, hub *Hub, id ksuid.KSUID, 
 	}
 	defer resp.Body.Close()
 
-    writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.TODO()}
+    writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.Background()}
 	var headerBuffer bytes.Buffer
 	HttpRespHeader(&headerBuffer, resp)
 	writer.Write(headerBuffer.Bytes())

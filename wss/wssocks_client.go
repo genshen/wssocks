@@ -153,9 +153,12 @@ func (client *Client) transData(wsc *WebSocketClient, conn *net.TCPConn, firstSe
 	}
 
 	// trans incoming data from proxy client application.
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel() // cancel data writing
 	go func() {
-        writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id, Ctx: context.TODO()}
-		if _, err := io.Copy(&writer, conn); err != nil {
+        writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id, Ctx: ctx}
+        _, err := io.Copy(&writer, conn)
+        if err != nil {
 			log.Error("write error:", err)
 		}
 		done <- Done{true, nil}
