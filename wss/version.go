@@ -9,7 +9,7 @@ import (
 // version of protocol.
 const VersionCode = 0x004
 const CompVersion = 0x003
-const CoreVersion = "0.4.1"
+const CoreVersion = "0.5.0-beta"
 
 type VersionNeg struct {
     Version           string `json:"version"`
