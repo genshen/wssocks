@@ -10,6 +10,7 @@ import (
 const VERSION = wss.CoreVersion
 var buildHash = "none"
 var buildTime = "none"
+var buildGoVersion = "none"
 
 var versionCommand = &cmds.Command{
 	Name:        "version",
@@ -38,6 +39,7 @@ func (v *version) Run() error {
 	fmt.Printf("protocol version: %d\n", wss.VersionCode)
 	fmt.Printf("commit: %s\n", buildHash)
 	fmt.Printf("build time: %s\n", buildTime)
+	fmt.Printf("build by: %s\n", buildGoVersion)
 	fmt.Println("Author: genshen<genshenchu@gmail.com>")
 	fmt.Println("github: https://github.com/genshen/wssocks")
 	return nil
