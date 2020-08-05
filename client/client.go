@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"github.com/genshen/cmds"
@@ -36,6 +37,7 @@ func init() {
 	clientCommand.FlagSet.StringVar(&client.httpAddr, "http-addr", ":1086", `listen address of http proxy (if enabled).`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
 	clientCommand.FlagSet.StringVar(&client.key, "key", "", `connection key.`)
+	clientCommand.FlagSet.BoolVar(&client.skipTLSVerify, "skip-tls-verify", false, `skip verification of the server's certificate chain and host name.`)
 
 	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.
 	clientCommand.Runner = &client
@@ -50,7 +52,8 @@ type client struct {
 	remote    string   // string usr of server
 	remoteUrl *url.URL // url of server
 	//	remoteHeader http.Header
-	key string
+    key           string
+    skipTLSVerify bool
 }
 
 type Handles struct {
@@ -98,6 +101,15 @@ func (c *client) Run() error {
         if err := clientPlugin.RedirectPlugin.BeforeRequest(&httpClient, c.remoteUrl, &wsHeader); err != nil {
 			return err
 		}
+	}
+	if c.remoteUrl.Scheme == "wss" && c.skipTLSVerify {
+		// ignore insecure verify
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		log.Warnln("Warning: you have skipped verification of the server's certificate chain and host name. " +
+			"Then client will accepts any certificate presented by the server and any host name in that certificate. " +
+			"In this mode, TLS is susceptible to man-in-the-middle attacks.")
 	}
 
     ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
