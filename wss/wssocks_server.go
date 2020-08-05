@@ -15,19 +15,24 @@ type WebsocksServerConfig struct {
     EnableStatusPage bool   // enable/disable status page
 }
 
-// return a a function handling websocket requests from the peer.
-func ServeWsWrapper(hc *HubCollection, config WebsocksServerConfig) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if config.EnableConnKey && r.Header.Get("Key") != config.ConnKey {
-			w.WriteHeader(401)
-			w.Write([]byte("Access denied!\n"))
-			return
-		}
-		serveWs(w, r, hc, config)
-	}
+type ServerWS struct {
+    config WebsocksServerConfig
+    hc     *HubCollection
 }
 
-func serveWs(w http.ResponseWriter, r *http.Request, hc *HubCollection, config WebsocksServerConfig) {
+// return a a function handling websocket requests from the peer.
+func NewServeWS(hc *HubCollection, config WebsocksServerConfig) *ServerWS {
+    return &ServerWS{config: config, hc: hc}
+}
+
+func (s *ServerWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    // check connection key
+    if s.config.EnableConnKey && r.Header.Get("Key") != s.config.ConnKey {
+        w.WriteHeader(401)
+        w.Write([]byte("Access denied!\n"))
+        return
+    }
+
     wc, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		log.Error(err)
@@ -38,12 +43,12 @@ func serveWs(w http.ResponseWriter, r *http.Request, hc *HubCollection, config W
     defer cancel()
 
 	// negotiate version with client.
-    if err := NegVersionServer(ctx, wc, config.EnableStatusPage); err != nil {
+    if err := NegVersionServer(ctx, wc, s.config.EnableStatusPage); err != nil {
 		return
 	}
 
-	hub := hc.AddHub(wc)
-	defer hc.RemoveProxy(hub.id)
+    hub := s.hc.AddHub(wc)
+    defer s.hc.RemoveProxy(hub.id)
 	defer hub.Close()
     go hub.Run()
 	// read messages from webSocket
@@ -55,7 +60,7 @@ func serveWs(w http.ResponseWriter, r *http.Request, hc *HubCollection, config W
 			log.Error("error reading webSocket message:", err)
 			break
 		}
-        if err = dispatchMessage(hub, msgType, p, config); err != nil {
+        if err = dispatchMessage(hub, msgType, p, s.config); err != nil {
 			log.Error("error proxy:", err)
 			// break skip error
 		}

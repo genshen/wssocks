@@ -72,7 +72,7 @@ func (s *server) Run() error {
     config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey, EnableStatusPage: s.status}
     hc := wss.NewHubCollection()
 
-    http.HandleFunc("/", wss.ServeWsWrapper(hc, config))
+    http.Handle("/", wss.NewServeWS(hc,config))
     if s.status {
         statikFS, err := fs.New()
         if err != nil {
