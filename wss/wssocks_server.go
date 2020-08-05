@@ -36,6 +36,7 @@ func (s *ServerWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     wc, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		log.Error(err)
+        return
 	}
     defer wc.Close(websocket.StatusNormalClosure, "the sky is falling")
 
