@@ -28,11 +28,12 @@ func init() {
     fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	serverCommand.FlagSet = fs
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
+	serverCommand.FlagSet.StringVar(&s.wsBasePath, "ws_base_path", "/", "base path for serving websocket.")
 	serverCommand.FlagSet.BoolVar(&s.http, "http", true, `enable http and https proxy.`)
-	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
 	serverCommand.FlagSet.BoolVar(&s.authEnable, "auth", false, `enable/disable connection authentication.`)
 	serverCommand.FlagSet.StringVar(&s.authKey, "auth_key", "", "connection key for authentication. \nIf not provided, it will generate one randomly.")
-    serverCommand.FlagSet.BoolVar(&s.status, "status", false, `enable/disable service status page.`)
+    serverCommand.FlagSet.BoolVar(&s.status, "status", false, `enable/disable serving status page.`)
+	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
 
 	serverCommand.Runner = &s
 	cmds.AllCommands = append(cmds.AllCommands, serverCommand)
@@ -40,6 +41,7 @@ func init() {
 
 type server struct {
 	address    string
+	wsBasePath string // base path for serving websocket and status page
 	http       bool   // enable http and https proxy
 	authEnable bool   // enable authentication connection key
 	authKey    string // the connection key if authentication is enabled
@@ -65,6 +67,17 @@ func (s *server) PreRun() error {
 		}
 		s.authKey = strings.ToUpper(hex.EncodeToString(b))
 	}
+	// set base url
+	if s.wsBasePath == "" {
+		s.wsBasePath = "/"
+	}
+	// complete prefix and suffix
+	if !strings.HasPrefix(s.wsBasePath, "/") {
+		s.wsBasePath = "/" + s.wsBasePath
+	}
+	if !strings.HasSuffix(s.wsBasePath, "/") {
+		s.wsBasePath = s.wsBasePath + "/"
+	}
 	return nil
 }
 
@@ -72,7 +85,7 @@ func (s *server) Run() error {
     config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey, EnableStatusPage: s.status}
     hc := wss.NewHubCollection()
 
-    http.Handle("/", wss.NewServeWS(hc,config))
+    http.Handle(s.wsBasePath, wss.NewServeWS(hc,config))
     if s.status {
         statikFS, err := fs.New()
         if err != nil {
@@ -88,8 +101,13 @@ func (s *server) Run() error {
     if s.status {
         log.Info("service status page is enabled at `/status` endpoint")
     }
+
+    listenAddrToLog := s.address + s.wsBasePath
+    if s.wsBasePath == "/"{
+		listenAddrToLog = s.address
+	}
 	log.WithFields(log.Fields{
-		"listen address": s.address,
+		"listen address": listenAddrToLog,
 	}).Info("listening for incoming messages.")
 
 	log.Fatal(http.ListenAndServe(s.address, nil))
