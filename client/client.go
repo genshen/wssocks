@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"flag"
+	"fmt"
 	"github.com/genshen/cmds"
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/term_view"
@@ -14,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
     "time"
 )
@@ -27,6 +29,16 @@ var clientCommand = &cmds.Command{
 	CustomFlags: false,
 	HasOptions:  true,
 }
+type listFlags []string
+
+func (l *listFlags) String() string {
+	return "my string representation"
+}
+
+func (l *listFlags) Set(value string) error {
+	*l = append(*l, value)
+	return nil
+}
 
 func init() {
 	var client client
@@ -37,6 +49,8 @@ func init() {
 	clientCommand.FlagSet.StringVar(&client.httpAddr, "http-addr", ":1086", `listen address of http proxy (if enabled).`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
 	clientCommand.FlagSet.StringVar(&client.key, "key", "", `connection key.`)
+	clientCommand.FlagSet.Var(&client.headers, "ws-header", `list of user defined http headers in websocket request. 
+(e.g: --ws-header "X-Custom-Header=some-value" --ws-header "X-Second-Header=another-value")`)
 	clientCommand.FlagSet.BoolVar(&client.skipTLSVerify, "skip-tls-verify", false, `skip verification of the server's certificate chain and host name.`)
 
 	clientCommand.FlagSet.Usage = clientCommand.Usage // use default usage provided by cmds.Command.
@@ -46,14 +60,15 @@ func init() {
 }
 
 type client struct {
-	address   string   // local listening address
-	http      bool     // enable http and https proxy
-	httpAddr  string   // listen address of http and https(if it is enabled)
-	remote    string   // string usr of server
-	remoteUrl *url.URL // url of server
-	//	remoteHeader http.Header
-    key           string
-    skipTLSVerify bool
+	address       string      // local listening address
+	http          bool        // enable http and https proxy
+	httpAddr      string      // listen address of http and https(if it is enabled)
+	remote        string      // string usr of server
+	remoteUrl     *url.URL    // url of server
+	headers       listFlags   // websocket headers passed from user.
+	remoteHeaders http.Header // parsed websocket headers (not presented in flag).
+	key           string
+	skipTLSVerify bool
 }
 
 type Handles struct {
@@ -79,6 +94,19 @@ func (c *client) PreRun() error {
 	} else {
 		log.Info("http(s) proxy is disabled.")
 	}
+
+	// check header format.
+	c.remoteHeaders = make(http.Header)
+	for _, header := range c.headers {
+		index := strings.IndexByte(header, '=')
+		if index == -1 || index+1 == len(header) {
+			return fmt.Errorf("bad http header in websocket request: %s", header)
+		}
+		hKey := ([]byte(header))[:index]
+		hValue := ([]byte(header))[index+1:]
+		c.remoteHeaders.Add(string(hKey), string(hValue))
+	}
+
 	return nil
 }
 
@@ -88,17 +116,15 @@ func (c *client) Run() error {
 		"remote": c.remoteUrl.String(),
 	}).Info("connecting to wssocks server.")
 
-	wsHeader := make(http.Header) // header in websocket request(default is nil)
-
 	if c.key != "" {
-		wsHeader.Set("Key", c.key)
+		c.remoteHeaders.Set("Key", c.key)
 	}
 
 	httpClient := http.Client{}
 	// loading and execute plugin
 	if clientPlugin.HasRedirectPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
-        if err := clientPlugin.RedirectPlugin.BeforeRequest(&httpClient, c.remoteUrl, &wsHeader); err != nil {
+        if err := clientPlugin.RedirectPlugin.BeforeRequest(&httpClient, c.remoteUrl, &c.remoteHeaders); err != nil {
 			return err
 		}
 	}
@@ -114,7 +140,7 @@ func (c *client) Run() error {
 
     ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
     defer cancel()
-    wsc, err := wss.NewWebSocketClient(ctx, c.remoteUrl.String(), &httpClient, wsHeader)
+    wsc, err := wss.NewWebSocketClient(ctx, c.remoteUrl.String(), &httpClient, c.remoteHeaders)
 	if err != nil {
 		log.Fatal("establishing connection error:", err)
 	}
