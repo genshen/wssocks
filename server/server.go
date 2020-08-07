@@ -32,6 +32,9 @@ func init() {
 	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
 	serverCommand.FlagSet.BoolVar(&s.authEnable, "auth", false, `enable/disable connection authentication.`)
 	serverCommand.FlagSet.StringVar(&s.authKey, "auth_key", "", "connection key for authentication. \nIf not provided, it will generate one randomly.")
+    serverCommand.FlagSet.BoolVar(&s.tls, "tls", false, "enable/disable HTTPS/TLS support of server.")
+    serverCommand.FlagSet.StringVar(&s.tlsCertFile, "tls-cert-file", "", "path of certificate file if HTTPS/tls is enabled.")
+    serverCommand.FlagSet.StringVar(&s.tlsKeyFile, "tls-key-file", "", "path of private key file if HTTPS/tls is enabled.")
     serverCommand.FlagSet.BoolVar(&s.status, "status", false, `enable/disable service status page.`)
 
 	serverCommand.Runner = &s
@@ -39,11 +42,14 @@ func init() {
 }
 
 type server struct {
-	address    string
-	http       bool   // enable http and https proxy
-	authEnable bool   // enable authentication connection key
-	authKey    string // the connection key if authentication is enabled
-    status     bool   // enable service status page
+	address     string
+	http        bool   // enable http and https proxy
+	authEnable  bool   // enable authentication connection key
+	authKey     string // the connection key if authentication is enabled
+	tls         bool   // enable/disable HTTPS/tls support of server.
+	tlsCertFile string // path of certificate file if HTTPS/tls is enabled.
+	tlsKeyFile  string // path of private key file if HTTPS/tls is enabled.
+	status      bool   // enable service status page
 }
 
 func genRandBytes(n int) ([]byte, error) {
@@ -92,6 +98,10 @@ func (s *server) Run() error {
 		"listen address": s.address,
 	}).Info("listening for incoming messages.")
 
-	log.Fatal(http.ListenAndServe(s.address, nil))
+	if s.tls {
+		log.Fatal(http.ListenAndServeTLS(s.address, s.tlsCertFile, s.tlsKeyFile, nil))
+	} else {
+		log.Fatal(http.ListenAndServe(s.address, nil))
+	}
 	return nil
 }
