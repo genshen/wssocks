@@ -113,7 +113,7 @@ function InfoBoard(props: InfoBoardProps) {
         </Col>
         <Col xs={12} sm={6} md={4} lg={3}>
           <Pane marginLeft="32px" display="flex" justifyContent="left" alignItems="center" flexDirection="row">
-            <Text margin="8px"> Connction Key </Text>
+            <Text margin="8px"> Connection Key </Text>
             <Popover
               trigger="hover"
               position={Position.BOTTOM_LEFT}

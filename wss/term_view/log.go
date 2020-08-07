@@ -55,7 +55,7 @@ func (p *ProgressLog) SetLogBuffer(r *wss.ConnRecord) {
 		if recordsHiden == 0 {
 			_, _ = fmt.Fprintf(w, "TOTAL\t%d\t\n", r.ConnSize)
 		} else {
-			_, _ = w.Write([]byte(fmt.Sprintf("TOTAL\t%d\t(%d record(s) hiden)\t\n",
+			_, _ = w.Write([]byte(fmt.Sprintf("TOTAL\t%d\t(%d record(s) hidden)\t\n",
 				r.ConnSize, recordsHiden)))
 		}
 	}
