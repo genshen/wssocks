@@ -15,6 +15,7 @@ type Version struct {
 
 type Info struct {
     Version              Version `json:"version"`
+    ServerBaseUrl        string  `json:"server_base_url"`
     Socks5Enable         bool    `json:"socks5_enabled"`
     Socks5DisableReason  string  `json:"socks5_disabled_reason"`
     HttpsEnable          bool    `json:"http_enabled"`
@@ -41,15 +42,17 @@ type handleStatus struct {
     enableConnKey bool
     hc            *wss.HubCollection
     setupTime     time.Time
+    serverBaseUrl string // base url of websocket
 }
 
 // create a http handle for handling service status
-func NewStatusHandle(hc *wss.HubCollection, enableHttp bool, enableConnKey bool) *handleStatus {
+func NewStatusHandle(hc *wss.HubCollection, enableHttp bool, enableConnKey bool, wsBaseUrl string) *handleStatus {
     return &handleStatus{
         hc:            hc,
         enableHttp:    enableHttp,
         enableConnKey: enableConnKey,
         setupTime:     time.Now(),
+        serverBaseUrl: wsBaseUrl,
     }
 }
 
@@ -68,6 +71,7 @@ func (s *handleStatus) ServeHTTP(w http.ResponseWriter, req *http.Request) {
                 VersionCode: wss.VersionCode,
                 ComVersion:  wss.CompVersion,
             },
+            ServerBaseUrl:       s.serverBaseUrl,
             Socks5Enable:        true,
             Socks5DisableReason: "",
             HttpsEnable:         s.enableHttp,

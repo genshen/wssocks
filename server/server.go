@@ -92,7 +92,7 @@ func (s *server) Run() error {
             log.Fatal(err)
         }
         http.Handle("/status/", http.StripPrefix("/status", http.FileServer(statikFS)))
-        http.Handle("/api/status/", status.NewStatusHandle(hc, s.http, s.authEnable))
+        http.Handle("/api/status/", status.NewStatusHandle(hc, s.http, s.authEnable, s.wsBasePath))
     }
 
 	if s.authEnable {

@@ -6,6 +6,7 @@ export interface Version {
 
 export interface Info {
     version: Version
+    server_base_url: string
     socks5_enabled: boolean
     socks5_disabled_reason: string
     http_enabled: boolean
