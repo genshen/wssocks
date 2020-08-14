@@ -14,13 +14,13 @@
     "@types/react-dom": "^16.9.0",
     "axios": "^0.19.2",
     "axios-hooks": "^2.1.0",
-    "evergreen-ui": "^4.29.1",
+    "evergreen-ui": "^5.0.4",
     "react": "^16.13.1",
     "react-copy-to-clipboard": "^5.0.2",
     "react-dom": "^16.13.1",
     "react-grid-system": "^7.0.3",
     "react-scripts": "3.4.1",
-    "typescript": "~3.7.2"
+    "typescript": "~3.9.7"
   },
   "scripts": {
     "start": "react-scripts start",
