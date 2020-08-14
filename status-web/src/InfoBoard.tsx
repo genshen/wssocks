@@ -66,7 +66,9 @@ function InfoBoard(props: InfoBoardProps) {
     )
   }
 
-  const server_host = (props.data.ssl_enabled ? 'wss' : 'ws') + '://' + window.location.host
+  const server_proctocol = props.data.ssl_enabled ? 'wss' : (window.location.protocol === 'https' ? 'wss' : 'ws')
+  const server_path = props.data.server_base_url === '/' ? '' : props.data.server_base_url
+  const server_addr = server_proctocol + '://' + window.location.host + server_path
   return (
     <Pane alignItems="center">
       {/* flex={1} display="flex" justifyContent="space-between" */}
@@ -87,8 +89,8 @@ function InfoBoard(props: InfoBoardProps) {
         <Col xs={12} sm={6} md={4} lg={3}>
           <Pane marginLeft="32px" display="flex" justifyContent="left" alignItems="center" flexDirection="row">
             <Text margin="8px"> Address</Text>
-            <Text color="selected"> {server_host} </Text>
-            <CopyToClipboard text={server_host} onCopy={() => onCopyAddr(server_host)}>
+            <Text color="selected"> {server_addr} </Text>
+            <CopyToClipboard text={server_addr} onCopy={() => onCopyAddr(server_addr)}>
               <IconButton icon={DuplicateIcon} appearance="minimal" marginLeft="4px" >Minimal</IconButton>
             </CopyToClipboard>
           </Pane>
