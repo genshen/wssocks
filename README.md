@@ -1,6 +1,9 @@
 # wssocks
 
 ![build](https://github.com/genshen/wssocks/workflows/Go/badge.svg)
+![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/genshen/wssocks?logo=docker&sort=date)
+![Docker Image Version (latest semver)](https://img.shields.io/docker/v/genshen/wssocks?sort=semver&logo=docker)
+![Docker Pulls](https://img.shields.io/docker/pulls/genshen/wssocks?logo=docker)
 
 > socks5 over websocket.
 
