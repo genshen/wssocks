@@ -62,8 +62,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 	switch socketStream.Type {
 	case WsTpBeats: // heart beats
 	case WsTpClose: // closed by client
-		hub.unregister <- id
-		return nil
+		return hub.CloseProxyConn(id)
 	case WsTpEst: // establish
 		var proxyEstMsg ProxyEstMessage
 		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
@@ -84,7 +83,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 				estData = decodedBytes
 			}
 		}
-		hub.est <- ProxyRegister{id, proxyEstMsg.Type, proxyEstMsg.Addr, estData}
+        go establishProxy(hub, ProxyRegister{id, proxyEstMsg.Type, proxyEstMsg.Addr, estData})
 	case WsTpData:
 		var requestMsg ProxyData
 		if err := json.Unmarshal(socketData, &requestMsg); err != nil {
@@ -106,9 +105,6 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 }
 
 func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
-	// todo size is only one client's size.
-	//	log.WithField("size", s.GetConnectorSize()+1).Trace("connection size changed.")
-	//	log.WithField("address", proxyEstMsg.Addr).Trace("proxy connected to remote")
     var e ProxyEstablish
 	if proxyMeta._type == ProxyTypeHttp {
         e = &HttpProxyEst{}
@@ -164,7 +160,7 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 	//defer close(done)
 
 	// todo check exists
-    hub.register <- &ProxyServer{Id: id, ProxyIns: e}
+    hub.addNewProxy(&ProxyServer{Id: id, ProxyIns: e})
 	defer hub.RemoveProxy(id)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -227,7 +223,7 @@ func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr s
 	defer close(closed)
 	defer close(client)
 
-    hub.register <- &ProxyServer{Id: id, ProxyIns: h}
+    hub.addNewProxy(&ProxyServer{Id: id, ProxyIns: h})
 	bodyReadCloser := NewBufferWR()
 	defer hub.RemoveProxy(id)
 	defer func() {

@@ -48,10 +48,9 @@ func (s *ServerWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    hub := s.hc.AddHub(wc)
+    hub := s.hc.NewHub(wc)
     defer s.hc.RemoveProxy(hub.id)
 	defer hub.Close()
-    go hub.Run()
 	// read messages from webSocket
 	for {
         msgType, p, err := wc.Read(ctx) // fixme context

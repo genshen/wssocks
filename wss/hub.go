@@ -19,15 +19,6 @@ type Hub struct {
     // Registered proxy connections.
     connPool map[ksuid.KSUID]*ProxyServer
 
-    // establish connection based on the request from client side.
-    est chan ProxyRegister
-
-    // register proxy connection
-    register chan *ProxyServer
-
-    // Unregister requests from clients.
-    unregister chan ksuid.KSUID
-
     mu sync.RWMutex
 }
 
@@ -45,34 +36,6 @@ func (h *Hub) Close() {
     for id, proxy := range h.connPool {
         proxy.ProxyIns.Close(false)
         delete(h.connPool, id)
-    }
-    close(h.est)
-    close(h.register)
-    close(h.unregister)
-}
-
-func (h *Hub) Run() {
-    for {
-        select {
-        case estProxy, ok := <-h.est:
-            if !ok {
-                return
-            }
-            go establishProxy(h, estProxy)
-
-        case proxy, ok := <-h.register:
-            if !ok {
-                return
-            }
-            h.addNewProxy(proxy)
-        case id, ok := <-h.unregister:
-            if !ok {
-                return
-            }
-            if proxy := h.GetProxyById(id); proxy != nil {
-                proxy.ProxyIns.Close(false) // todo remove proxy here
-            }
-        }
     }
 }
 
@@ -99,7 +62,15 @@ func (h *Hub) GetConnectorSize() int {
     return len(h.connPool)
 }
 
-// remove a connection specified by id.
+// Close proxy connection with remote host.
+// It can be called when receiving tell close message from client
+func (h *Hub) CloseProxyConn(id ksuid.KSUID) error {
+    if proxy := h.GetProxyById(id); proxy != nil {
+        return proxy.ProxyIns.Close(false) // todo remove proxy here
+    }
+    return nil
+}
+
 func (h *Hub) RemoveProxy(id ksuid.KSUID) {
     h.mu.Lock()
     defer h.mu.Unlock()
