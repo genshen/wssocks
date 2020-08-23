@@ -21,17 +21,14 @@ func NewHubCollection() *HubCollection {
     return &hc
 }
 
-// add a hub to hub collection
-func (hc *HubCollection) AddHub(conn *websocket.Conn) *Hub {
+// create a hub and add it to hub collection
+func (hc *HubCollection) NewHub(conn *websocket.Conn) *Hub {
     hc.mutex.Lock()
     defer hc.mutex.Unlock()
 
     hub := Hub{
         id:                  ksuid.New(),
         ConcurrentWebSocket: ConcurrentWebSocket{WsConn: conn},
-        est:                 make(chan ProxyRegister),
-        register:            make(chan *ProxyServer),
-        unregister:          make(chan ksuid.KSUID),
         connPool:            make(map[ksuid.KSUID]*ProxyServer),
     }
 
