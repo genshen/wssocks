@@ -35,11 +35,11 @@ func (client *Socks5Client) ParseHeader(conn net.Conn, header []byte) (string, e
 
 	// step2: process client Requests and does Reply
 	/**
-	+----+-----+-------+------+----------+----------+
-	|VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
-	+----+-----+-------+------+----------+----------+
-	| 1  |  1  | X'00' |  1   | Variable |    2     |
-	+----+-----+-------+------+----------+----------+
+	  +----+-----+-------+------+----------+----------+
+	  |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
+	  +----+-----+-------+------+----------+----------+
+	  | 1  |  1  | X'00' |  1   | Variable |    2     |
+	  +----+-----+-------+------+----------+----------+
 	*/
 	var buffer [1024]byte
 

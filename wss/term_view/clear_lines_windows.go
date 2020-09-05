@@ -52,7 +52,7 @@ func clearLines(f FdWriter, lines int) {
 	var csbi consoleScreenBufferInfo
 	_, _, _ = procGetConsoleScreenBufferInfo.Call(fd, uintptr(unsafe.Pointer(&csbi)))
 
-    for i := 0; i < lines; i++ {
+	for i := 0; i < lines; i++ {
 		// move the cursor up
 		csbi.cursorPosition.y--
 		_, _, _ = procSetConsoleCursorPosition.Call(fd, uintptr(*(*int32)(unsafe.Pointer(&csbi.cursorPosition))))

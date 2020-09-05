@@ -4,14 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
-    "net/http"
-    "strings"
+	"net/http"
+	"strings"
 
 	"github.com/genshen/cmds"
-    _ "github.com/genshen/wssocks/server/statik"
+	_ "github.com/genshen/wssocks/server/statik"
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/status"
-    "github.com/rakyll/statik/fs"
+	"github.com/rakyll/statik/fs"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -25,18 +25,18 @@ var serverCommand = &cmds.Command{
 
 func init() {
 	var s server
-    fs := flag.NewFlagSet("server", flag.ContinueOnError)
+	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	serverCommand.FlagSet = fs
 	serverCommand.FlagSet.StringVar(&s.address, "addr", ":1088", `listen address.`)
 	serverCommand.FlagSet.StringVar(&s.wsBasePath, "ws_base_path", "/", "base path for serving websocket.")
 	serverCommand.FlagSet.BoolVar(&s.http, "http", true, `enable http and https proxy.`)
 	serverCommand.FlagSet.BoolVar(&s.authEnable, "auth", false, `enable/disable connection authentication.`)
 	serverCommand.FlagSet.StringVar(&s.authKey, "auth_key", "", "connection key for authentication. \nIf not provided, it will generate one randomly.")
-    serverCommand.FlagSet.BoolVar(&s.tls, "tls", false, "enable/disable HTTPS/TLS support of server.")
-    serverCommand.FlagSet.StringVar(&s.tlsCertFile, "tls-cert-file", "", "path of certificate file if HTTPS/tls is enabled.")
-    serverCommand.FlagSet.StringVar(&s.tlsKeyFile, "tls-key-file", "", "path of private key file if HTTPS/tls is enabled.")
-    serverCommand.FlagSet.BoolVar(&s.status, "status", false, `enable/disable service status page.`)
-    serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
+	serverCommand.FlagSet.BoolVar(&s.tls, "tls", false, "enable/disable HTTPS/TLS support of server.")
+	serverCommand.FlagSet.StringVar(&s.tlsCertFile, "tls-cert-file", "", "path of certificate file if HTTPS/tls is enabled.")
+	serverCommand.FlagSet.StringVar(&s.tlsKeyFile, "tls-key-file", "", "path of private key file if HTTPS/tls is enabled.")
+	serverCommand.FlagSet.BoolVar(&s.status, "status", false, `enable/disable service status page.`)
+	serverCommand.FlagSet.Usage = serverCommand.Usage // use default usage provided by cmds.Command.
 
 	serverCommand.Runner = &s
 	cmds.AllCommands = append(cmds.AllCommands, serverCommand)
@@ -88,28 +88,28 @@ func (s *server) PreRun() error {
 }
 
 func (s *server) Run() error {
-    config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey, EnableStatusPage: s.status}
-    hc := wss.NewHubCollection()
+	config := wss.WebsocksServerConfig{EnableHttp: s.http, EnableConnKey: s.authEnable, ConnKey: s.authKey, EnableStatusPage: s.status}
+	hc := wss.NewHubCollection()
 
-    http.Handle(s.wsBasePath, wss.NewServeWS(hc,config))
-    if s.status {
-        statikFS, err := fs.New()
-        if err != nil {
-            log.Fatal(err)
-        }
-        http.Handle("/status/", http.StripPrefix("/status", http.FileServer(statikFS)))
-        http.Handle("/api/status/", status.NewStatusHandle(hc, s.http, s.authEnable, s.wsBasePath))
-    }
+	http.Handle(s.wsBasePath, wss.NewServeWS(hc, config))
+	if s.status {
+		statikFS, err := fs.New()
+		if err != nil {
+			log.Fatal(err)
+		}
+		http.Handle("/status/", http.StripPrefix("/status", http.FileServer(statikFS)))
+		http.Handle("/api/status/", status.NewStatusHandle(hc, s.http, s.authEnable, s.wsBasePath))
+	}
 
 	if s.authEnable {
 		log.Info("connection authentication key: ", s.authKey)
 	}
-    if s.status {
-        log.Info("service status page is enabled at `/status` endpoint")
-    }
+	if s.status {
+		log.Info("service status page is enabled at `/status` endpoint")
+	}
 
-    listenAddrToLog := s.address + s.wsBasePath
-    if s.wsBasePath == "/"{
+	listenAddrToLog := s.address + s.wsBasePath
+	if s.wsBasePath == "/" {
 		listenAddrToLog = s.address
 	}
 	log.WithFields(log.Fields{

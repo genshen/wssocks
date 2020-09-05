@@ -1,15 +1,15 @@
 package wss
 
 import (
-    "context"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"github.com/segmentio/ksuid"
 	"net/http"
-    "nhooyr.io/websocket"
-    "nhooyr.io/websocket/wsjson"
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 	"sync"
-    "time"
+	"time"
 )
 
 // WebSocketClient is a collection of proxy clients.
@@ -19,7 +19,7 @@ type WebSocketClient struct {
 	ConcurrentWebSocket
 	proxies map[ksuid.KSUID]*ProxyClient // all proxies on this websocket.
 	proxyMu sync.RWMutex                 // mutex to operate proxies map.
-    cancel context.CancelFunc
+	cancel  context.CancelFunc
 }
 
 // get the connection size
@@ -32,16 +32,16 @@ func (wsc *WebSocketClient) ConnSize() int {
 // Establish websocket connection.
 // And initialize proxies container.
 func NewWebSocketClient(ctx context.Context, addr string, hc *http.Client, header http.Header) (*WebSocketClient, error) {
-    ws, _, err := websocket.Dial(ctx, addr, &websocket.DialOptions{HTTPClient: hc, HTTPHeader: header})
+	ws, _, err := websocket.Dial(ctx, addr, &websocket.DialOptions{HTTPClient: hc, HTTPHeader: header})
 	if err != nil {
 		return nil, err
 	}
-    return &WebSocketClient{
-        ConcurrentWebSocket: ConcurrentWebSocket{
-            WsConn: ws,
-        },
-        cancel:  nil,
-        proxies: make(map[ksuid.KSUID]*ProxyClient),
+	return &WebSocketClient{
+		ConcurrentWebSocket: ConcurrentWebSocket{
+			WsConn: ws,
+		},
+		cancel:  nil,
+		proxies: make(map[ksuid.KSUID]*ProxyClient),
 	}, nil
 }
 
@@ -75,9 +75,9 @@ func (wsc *WebSocketClient) TellClose(id ksuid.KSUID) error {
 		Type: WsTpClose,
 		Data: nil,
 	}
-    ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-    defer cancel()
-    if err := wsjson.Write(ctx, wsc.WsConn, &finish); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := wsjson.Write(ctx, wsc.WsConn, &finish); err != nil {
 		return err
 	}
 	return nil
@@ -94,20 +94,20 @@ func (wsc *WebSocketClient) RemoveProxy(id ksuid.KSUID) {
 
 // listen income websocket messages and dispatch to different proxies.
 func (wsc *WebSocketClient) ListenIncomeMsg(readLimit int64) error {
-    ctx, can := context.WithCancel(context.Background())
-    wsc.cancel = can
+	ctx, can := context.WithCancel(context.Background())
+	wsc.cancel = can
 	wsc.WsConn.SetReadLimit(readLimit)
 
 	for {
 		// check stop first
 		select {
-        case <-ctx.Done():
+		case <-ctx.Done():
 			return StoppedError
 		default:
 			// if the channel is still open, continue as normal
 		}
 
-        _, data, err := wsc.WsConn.Read(ctx)
+		_, data, err := wsc.WsConn.Read(ctx)
 		if err != nil {
 			// todo close all
 			return err // todo close websocket
@@ -149,9 +149,9 @@ func (wsc *WebSocketClient) ListenIncomeMsg(readLimit int64) error {
 }
 
 func (wsc *WebSocketClient) Close() error {
-    if wsc.cancel != nil {
-        wsc.cancel()
-    }
+	if wsc.cancel != nil {
+		wsc.cancel()
+	}
 	if err := wsc.WSClose(); err != nil {
 		return err
 	}

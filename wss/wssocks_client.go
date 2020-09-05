@@ -1,7 +1,7 @@
 package wss
 
 import (
-    "context"
+	"context"
 	"errors"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
@@ -35,7 +35,7 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool) ([]byte, int, string
 
 	n, err := conn.Read(buffer[:])
 	if err != nil {
-        return nil, 0, "", err
+		return nil, 0, "", err
 	}
 
 	// select a matched proxy type
@@ -99,11 +99,11 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 		}
 
 		go func() {
-            conn := c.(*net.TCPConn)
-            // defer c.Close()
-            defer conn.Close()
+			conn := c.(*net.TCPConn)
+			// defer c.Close()
+			defer conn.Close()
 			// In reply, we can get proxy type, target address and first send data.
-            firstSendData, proxyType, addr, err := client.Reply(conn, enableHttp)
+			firstSendData, proxyType, addr, err := client.Reply(conn, enableHttp)
 			if err != nil {
 				log.Error(err)
 			}
@@ -153,12 +153,12 @@ func (client *Client) transData(wsc *WebSocketClient, conn *net.TCPConn, firstSe
 	}
 
 	// trans incoming data from proxy client application.
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel() // cancel data writing
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // cancel data writing
 	go func() {
-        writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id, Ctx: ctx}
-        _, err := io.Copy(&writer, conn)
-        if err != nil {
+		writer := WebSocketWriter{WSC: &wsc.ConcurrentWebSocket, Id: proxy.Id, Ctx: ctx}
+		_, err := io.Copy(&writer, conn)
+		if err != nil {
 			log.Error("write error:", err)
 		}
 		done <- Done{true, nil}

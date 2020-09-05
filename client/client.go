@@ -17,7 +17,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
-    "time"
+	"time"
 )
 
 const CommandNameClient = "client"
@@ -29,6 +29,7 @@ var clientCommand = &cmds.Command{
 	CustomFlags: false,
 	HasOptions:  true,
 }
+
 type listFlags []string
 
 func (l *listFlags) String() string {
@@ -42,7 +43,7 @@ func (l *listFlags) Set(value string) error {
 
 func init() {
 	var client client
-    fs := flag.NewFlagSet(CommandNameClient, flag.ContinueOnError)
+	fs := flag.NewFlagSet(CommandNameClient, flag.ContinueOnError)
 	clientCommand.FlagSet = fs
 	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5 proxy.`)
 	clientCommand.FlagSet.BoolVar(&client.http, "http", false, `enable http and https proxy.`)
@@ -124,7 +125,7 @@ func (c *client) Run() error {
 	// loading and execute plugin
 	if clientPlugin.HasRedirectPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
-        if err := clientPlugin.RedirectPlugin.BeforeRequest(&httpClient, c.remoteUrl, &c.remoteHeaders); err != nil {
+		if err := clientPlugin.RedirectPlugin.BeforeRequest(&httpClient, c.remoteUrl, &c.remoteHeaders); err != nil {
 			return err
 		}
 	}
@@ -138,9 +139,9 @@ func (c *client) Run() error {
 			"In this mode, TLS is susceptible to man-in-the-middle attacks.")
 	}
 
-    ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
-    defer cancel()
-    wsc, err := wss.NewWebSocketClient(ctx, c.remoteUrl.String(), &httpClient, c.remoteHeaders)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
+	defer cancel()
+	wsc, err := wss.NewWebSocketClient(ctx, c.remoteUrl.String(), &httpClient, c.remoteHeaders)
 	if err != nil {
 		log.Fatal("establishing connection error:", err)
 	}
@@ -151,7 +152,7 @@ func (c *client) Run() error {
 	defer wsc.WSClose()
 
 	// negotiate version
-    if version, err := wss.ExchangeVersion(ctx, wsc.WsConn); err != nil {
+	if version, err := wss.ExchangeVersion(ctx, wsc.WsConn); err != nil {
 		return err
 	} else {
 		if clientPlugin.HasVersionPlugin() {
@@ -165,8 +166,8 @@ func (c *client) Run() error {
 				"version number":          version.Version,
 			}).Info("server version")
 
-            // client protocol version must eq or smaller than server version (newer client is not allowed)
-            // And, compatible version is the lowest version for client.
+			// client protocol version must eq or smaller than server version (newer client is not allowed)
+			// And, compatible version is the lowest version for client.
 			if version.CompVersion > wss.VersionCode || wss.VersionCode > version.VersionCode {
 				return errors.New("incompatible protocol version of client and server")
 			}
@@ -176,17 +177,17 @@ func (c *client) Run() error {
 					"server wssocks version": version.Version,
 				}).Warning("different version of client and server wssocks")
 			}
-            if version.EnableStatusPage {
-                if endpoint, err := url.Parse(c.remote + "/status"); err != nil {
-                    return err
-                } else {
-                    endpoint.Scheme = "http"
-                    log.WithFields(log.Fields{
-                        "endpoint": endpoint.String(),
-                    }).Infoln("server status is available, you can visit the endpoint to get status.")
-                }
-            }
-        }
+			if version.EnableStatusPage {
+				if endpoint, err := url.Parse(c.remote + "/status"); err != nil {
+					return err
+				} else {
+					endpoint.Scheme = "http"
+					log.WithFields(log.Fields{
+						"endpoint": endpoint.String(),
+					}).Infoln("server status is available, you can visit the endpoint to get status.")
+				}
+			}
+		}
 	}
 
 	var hdl Handles
@@ -215,18 +216,18 @@ func (c *client) Run() error {
 	// start websocket message listen.
 	go func() {
 		defer wg.Done()
-        defer once.Do(closeAll)
-        if err := wsc.ListenIncomeMsg(1 << 29); err != nil {
+		defer once.Do(closeAll)
+		if err := wsc.ListenIncomeMsg(1 << 29); err != nil {
 			log.Error("error websocket read:", err)
 		}
 	}()
 	// send heart beats.
-    heartbeat, hbCtx := wss.NewHeartBeat(wsc)
-    hdl.hb = heartbeat
+	heartbeat, hbCtx := wss.NewHeartBeat(wsc)
+	hdl.hb = heartbeat
 	go func() {
 		defer wg.Done()
-        defer once.Do(closeAll)
-        if err := hdl.hb.Start(hbCtx, time.Minute); err != nil {
+		defer once.Do(closeAll)
+		if err := hdl.hb.Start(hbCtx, time.Minute); err != nil {
 			log.Info("heartbeat ending", err)
 		}
 	}()
@@ -237,19 +238,19 @@ func (c *client) Run() error {
 		plog := term_view.NewPLog(record)
 		log.SetOutput(plog) // change log stdout to plog
 
-        record.OnChange = func(wss.ConnStatus) {
+		record.OnChange = func(wss.ConnStatus) {
 			// update log
 			plog.SetLogBuffer(record) // call Writer.Write() to set log data into buffer
 			plog.Writer.Flush(nil)    // flush buffer
 		}
-    } else {
-        record.OnChange = func(status wss.ConnStatus) {
-            if status.IsNew {
-                log.WithField("address", status.Address).Traceln("new proxy connection")
-            } else {
-                log.WithField("address", status.Address).Traceln("close proxy connection")
-            }
-        }
+	} else {
+		record.OnChange = func(status wss.ConnStatus) {
+			if status.IsNew {
+				log.WithField("address", status.Address).Traceln("new proxy connection")
+			} else {
+				log.WithField("address", status.Address).Traceln("close proxy connection")
+			}
+		}
 	}
 
 	// http listening
@@ -259,7 +260,7 @@ func (c *client) Run() error {
 			Info("listening on local address for incoming proxy requests.")
 		go func() {
 			defer wg.Done()
-            defer once.Do(closeAll)
+			defer once.Do(closeAll)
 			handle := wss.NewHttpProxy(wsc, record)
 			hdl.httpServer = &http.Server{Addr: c.httpAddr, Handler: &handle}
 			if err := hdl.httpServer.ListenAndServe(); err != nil {
@@ -271,8 +272,8 @@ func (c *client) Run() error {
 	// start listen for socks5 and https connection.
 	hdl.cl = wss.NewClient()
 	go func() {
-        defer wg.Done()
-        defer once.Do(closeAll)
+		defer wg.Done()
+		defer once.Do(closeAll)
 		if err := hdl.cl.ListenAndServe(record, wsc, c.address, c.http, func() {
 			if c.http {
 				log.WithField("socks5 listen address", c.address).

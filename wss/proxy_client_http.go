@@ -2,14 +2,14 @@ package wss
 
 import (
 	"bytes"
-    "context"
+	"context"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 
-    "github.com/segmentio/ksuid"
-    log "github.com/sirupsen/logrus"
+	"github.com/segmentio/ksuid"
+	log "github.com/sirupsen/logrus"
 )
 
 type HttpClient struct {
@@ -84,7 +84,7 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// copy request body data
-    writer := WebSocketWriter{WSC: &client.wsc.ConcurrentWebSocket, Id: proxy.Id, Ctx: context.Background()}
+	writer := WebSocketWriter{WSC: &client.wsc.ConcurrentWebSocket, Id: proxy.Id, Ctx: context.Background()}
 	if _, err := io.Copy(&writer, req.Body); err != nil {
 		log.Error("write body error:", err)
 		client.wsc.RemoveProxy(proxy.Id)
@@ -94,9 +94,9 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    if err := client.wsc.WriteProxyMessage(ctx, proxy.Id, TagNoMore, nil); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := client.wsc.WriteProxyMessage(ctx, proxy.Id, TagNoMore, nil); err != nil {
 		log.Error("write body error:", err)
 		client.wsc.RemoveProxy(proxy.Id)
 		if err := client.wsc.TellClose(proxy.Id); err != nil {

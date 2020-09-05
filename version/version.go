@@ -8,6 +8,7 @@ import (
 )
 
 const VERSION = wss.CoreVersion
+
 var buildHash = "none"
 var buildTime = "none"
 var buildGoVersion = "none"

@@ -2,8 +2,8 @@ package wss
 
 import (
 	"context"
-    "nhooyr.io/websocket"
-    "nhooyr.io/websocket/wsjson"
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 )
 
 // version of protocol.
@@ -12,10 +12,10 @@ const CompVersion = 0x003
 const CoreVersion = "0.5.0-beta.2"
 
 type VersionNeg struct {
-    Version           string `json:"version"`
-    CompVersion       uint   `json:"comp_version"` // Compatible version code
-    VersionCode       uint   `json:"version_code"`
-    EnableStatusPage  bool   `json:"status_page"`
+	Version          string `json:"version"`
+	CompVersion      uint   `json:"comp_version"` // Compatible version code
+	VersionCode      uint   `json:"version_code"`
+	EnableStatusPage bool   `json:"status_page"`
 }
 
 // negotiate client and server version
@@ -24,10 +24,10 @@ type VersionNeg struct {
 func ExchangeVersion(ctx context.Context, wsConn *websocket.Conn) (VersionNeg, error) {
 	var versionRec VersionNeg
 	versionServer := VersionNeg{Version: CoreVersion, VersionCode: VersionCode}
-    if err := wsjson.Write(ctx, wsConn, &versionServer); err != nil {
+	if err := wsjson.Write(ctx, wsConn, &versionServer); err != nil {
 		return versionRec, err
 	}
-    if err := wsjson.Read(ctx, wsConn, &versionRec); err != nil {
+	if err := wsjson.Read(ctx, wsConn, &versionRec); err != nil {
 		return versionRec, err
 	}
 	return versionRec, nil
@@ -37,15 +37,15 @@ func ExchangeVersion(ctx context.Context, wsConn *websocket.Conn) (VersionNeg, e
 func NegVersionServer(ctx context.Context, wsConn *websocket.Conn, enableStatusPage bool) error {
 	// read from client
 	var versionClient VersionNeg
-    if err := wsjson.Read(ctx, wsConn, &versionClient); err != nil {
+	if err := wsjson.Read(ctx, wsConn, &versionClient); err != nil {
 		return err
 	}
 	// send to client
-    versionServer := VersionNeg{
-        Version:     CoreVersion,
-        CompVersion: CompVersion,
-        VersionCode: VersionCode,
-        EnableStatusPage: enableStatusPage,
-    } // todo more information
-    return wsjson.Write(ctx, wsConn, &versionServer)
+	versionServer := VersionNeg{
+		Version:          CoreVersion,
+		CompVersion:      CompVersion,
+		VersionCode:      VersionCode,
+		EnableStatusPage: enableStatusPage,
+	} // todo more information
+	return wsjson.Write(ctx, wsConn, &versionServer)
 }

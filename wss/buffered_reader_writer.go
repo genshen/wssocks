@@ -2,7 +2,7 @@ package wss
 
 import (
 	"bytes"
-    "errors"
+	"errors"
 	"io"
 	"sync"
 )
@@ -22,7 +22,7 @@ func (h *BufferedWR) Close() error {
 		return nil
 	}
 	h.done = true
-    close(h.update)
+	close(h.update)
 	return nil
 }
 
@@ -34,13 +34,13 @@ func (h *BufferedWR) isClosed() bool {
 func (h *BufferedWR) Write(p []byte) (int, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-    if h.done {
-        return 0, errors.New("write after buffer closed")
-    }
-    // make sure it indeed has data in buffer when noticing wait
-    if len(p) == 0 {
-        return 0, nil
-    }
+	if h.done {
+		return 0, errors.New("write after buffer closed")
+	}
+	// make sure it indeed has data in buffer when noticing wait
+	if len(p) == 0 {
+		return 0, nil
+	}
 	if h.buffer.Len() == 0 {
 		h.update <- struct{}{}
 	}
@@ -50,26 +50,26 @@ func (h *BufferedWR) Write(p []byte) (int, error) {
 // read data from buffer
 // make sure there is no more one goroutine reading
 func (h *BufferedWR) Read(p []byte) (int, error) {
-    // wait to make sure there is data in buffer
-    if h.buffer.Len() == 0 {
-        select {
-        case _, ok := <-h.update: // data received from client
-            if !ok {
-                return 0, io.EOF
-            }
-        }
-    }
-
-    h.mu.Lock()
-    defer h.mu.Unlock()
-    if h.done {
-        return 0, io.EOF
+	// wait to make sure there is data in buffer
+	if h.buffer.Len() == 0 {
+		select {
+		case _, ok := <-h.update: // data received from client
+			if !ok {
+				return 0, io.EOF
+			}
+		}
 	}
-    return h.buffer.Read(p)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.done {
+		return 0, io.EOF
+	}
+	return h.buffer.Read(p)
 }
 
 func NewBufferWR() *BufferedWR {
 	update := make(chan struct{}, 1)
-    body := BufferedWR{done: false, update: update}
+	body := BufferedWR{done: false, update: update}
 	return &body
 }

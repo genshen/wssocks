@@ -4,7 +4,7 @@ package term_view
 
 import (
 	"bytes"
-    "github.com/mattn/go-isatty"
+	"github.com/mattn/go-isatty"
 	"io"
 	"os"
 	"sync"
@@ -35,21 +35,21 @@ func NewWriter() *Writer {
 
 // wrapper function to call clearLines on different platform
 func (w *Writer) ClearLines() {
-    f, ok := w.OutDev.(FdWriter)
-    if ok && !isatty.IsTerminal(f.Fd()) {
-        ok = false
-    }
-    if !ok {
-    	// dont clear lines if it is not a tty (e.g. io redirect to a file).
-        return
-    }
-    clearLines(f, w.lineCount)
+	f, ok := w.OutDev.(FdWriter)
+	if ok && !isatty.IsTerminal(f.Fd()) {
+		ok = false
+	}
+	if !ok {
+		// dont clear lines if it is not a tty (e.g. io redirect to a file).
+		return
+	}
+	clearLines(f, w.lineCount)
 }
 
 // Write write contents to the writer's io writer.
 func (w *Writer) NormalWrite(buf []byte) (n int, err error) {
 	w.mtx.Lock()
-    w.ClearLines() // clean progress lines first
+	w.ClearLines() // clean progress lines first
 	defer w.mtx.Unlock()
 	return w.OutDev.Write(buf)
 }
@@ -68,7 +68,7 @@ func (w *Writer) Flush(onLinesCleared func() error) error {
 	if len(w.buf.Bytes()) == 0 {
 		return nil
 	}
-    w.ClearLines()
+	w.ClearLines()
 	if onLinesCleared != nil {
 		if err := onLinesCleared(); err != nil { // callback if lines is cleared.
 			return err

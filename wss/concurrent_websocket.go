@@ -1,11 +1,11 @@
 package wss
 
 import (
-    "context"
+	"context"
 	"encoding/base64"
 	"github.com/segmentio/ksuid"
-    "nhooyr.io/websocket"
-    "nhooyr.io/websocket/wsjson"
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 )
 
 type ConcurrentWebSocketInterface interface {
@@ -20,7 +20,7 @@ type ConcurrentWebSocket struct {
 
 // close websocket connection
 func (wsc *ConcurrentWebSocket) WSClose() error {
-    return wsc.WsConn.Close(websocket.StatusNormalClosure, "")
+	return wsc.WsConn.Close(websocket.StatusNormalClosure, "")
 }
 
 // write message to websocket, the data is fixed format @ProxyData
@@ -33,14 +33,14 @@ func (wsc *ConcurrentWebSocket) WriteProxyMessage(ctx context.Context, id ksuid.
 		Type: WsTpData,
 		Data: ProxyData{Tag: tag, DataBase64: dataBase64},
 	}
-    return wsjson.Write(ctx, wsc.WsConn, &jsonData)
+	return wsjson.Write(ctx, wsc.WsConn, &jsonData)
 }
 
 type WebSocketWriter struct {
 	WSC  *ConcurrentWebSocket
 	Id   ksuid.KSUID // connection id.
-    Ctx context.Context
-	Type int         // type of trans data.
+	Ctx  context.Context
+	Type int // type of trans data.
 }
 
 func (writer *WebSocketWriter) Write(buffer []byte) (n int, err error) {

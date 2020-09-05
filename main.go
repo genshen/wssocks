@@ -1,8 +1,8 @@
 package main
 
 import (
-    "errors"
-    "flag"
+	"errors"
+	"flag"
 	"github.com/genshen/cmds"
 	_ "github.com/genshen/wssocks/client"
 	_ "github.com/genshen/wssocks/server"
@@ -17,8 +17,8 @@ func init() {
 func main() {
 	cmds.SetProgramName("wssocks")
 	if err := cmds.Parse(); err != nil {
-        if !errors.Is(err, flag.ErrHelp) && !errors.Is(err, &cmds.SubCommandParseError{}) {
-            log.Fatal(err)
-        }
+		if !errors.Is(err, flag.ErrHelp) && !errors.Is(err, &cmds.SubCommandParseError{}) {
+			log.Fatal(err)
+		}
 	}
 }

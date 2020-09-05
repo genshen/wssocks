@@ -9,7 +9,7 @@ import (
 
 type ServerRedirect interface {
 	// in the plugin, we may add http header and modify remote address.
-    BeforeRequest(hc *http.Client, url *url.URL, header *http.Header) error
+	BeforeRequest(hc *http.Client, url *url.URL, header *http.Header) error
 }
 
 type VersionPlugin interface {
