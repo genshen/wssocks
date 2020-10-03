@@ -52,6 +52,7 @@ func (s *ServerWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer s.hc.RemoveProxy(hub.id)
 	defer hub.Close()
 	// read messages from webSocket
+	wc.SetReadLimit(1 << 23) // 8 MiB
 	for {
 		msgType, p, err := wc.Read(ctx) // fixme context
 		// if WebSocket is closed by some reason, then this func will return,
