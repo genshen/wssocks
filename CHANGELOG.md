@@ -1,4 +1,27 @@
 
+<a name="v0.5.0-beta.3"></a>
+## [v0.5.0-beta.3](https://github.com/genshen/wssocks/compare/v0.5.0-beta.2...v0.5.0-beta.3)
+
+> 2020-10-03
+
+### Build
+
+* **docker:** update go version in docker building, and specific alpine version
+* **gomodule:** update dependencies version
+
+### Chore
+
+* add go code report badge
+
+### Fix
+
+* **server:** increase server read limit to 8 MiB to fix client exit with error "StatusMessageTooBig"
+
+### Style
+
+* format project code: use tab as indent
+
+
 <a name="v0.5.0-beta.2"></a>
 ## [v0.5.0-beta.2](https://github.com/genshen/wssocks/compare/v0.5.0-beta...v0.5.0-beta.2)
 
