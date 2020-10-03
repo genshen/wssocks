@@ -10,7 +10,7 @@ RUN cd web \
     && yarn build
 
 ## build go binary
-FROM golang:1.14.6-alpine AS builder
+FROM golang:1.15.2-alpine AS builder
 
 ARG PACKAGE=github.com/genshen/wssocks
 ARG BUILD_FLAG="-X 'github.com/genshen/wssocks/version.buildHash=`git rev-parse HEAD`' \
@@ -31,7 +31,7 @@ RUN cd ./src/${PACKAGE} \
     && go install
 
 ## copy binary
-FROM alpine:latest
+FROM alpine:3.12.0
 
 ARG HOME="/home/wssocks"
 
