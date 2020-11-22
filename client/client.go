@@ -11,6 +11,7 @@ import (
 	"github.com/genshen/wssocks/wss/term_view"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -111,6 +112,28 @@ func (c *client) PreRun() error {
 	return nil
 }
 
+func NewHttpClient() (*http.Client, *http.Transport) {
+	// set to use default Http Transport
+	tr := http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	httpClient := http.Client{
+		Transport: &tr,
+	}
+	return &httpClient, &tr
+}
+
 func (c *client) Run() error {
 	// start websocket connection (to remote server).
 	log.WithFields(log.Fields{
@@ -121,19 +144,19 @@ func (c *client) Run() error {
 		c.remoteHeaders.Set("Key", c.key)
 	}
 
-	httpClient := http.Client{}
+	httpClient, transport := NewHttpClient()
+
 	// loading and execute plugin
 	if clientPlugin.HasRedirectPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
-		if err := clientPlugin.RedirectPlugin.BeforeRequest(&httpClient, c.remoteUrl, &c.remoteHeaders); err != nil {
+		if err := clientPlugin.RedirectPlugin.BeforeRequest(httpClient, c.remoteUrl, &c.remoteHeaders); err != nil {
 			return err
 		}
 	}
+
 	if c.remoteUrl.Scheme == "wss" && c.skipTLSVerify {
 		// ignore insecure verify
-		httpClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		log.Warnln("Warning: you have skipped verification of the server's certificate chain and host name. " +
 			"Then client will accepts any certificate presented by the server and any host name in that certificate. " +
 			"In this mode, TLS is susceptible to man-in-the-middle attacks.")
@@ -141,7 +164,7 @@ func (c *client) Run() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
 	defer cancel()
-	wsc, err := wss.NewWebSocketClient(ctx, c.remoteUrl.String(), &httpClient, c.remoteHeaders)
+	wsc, err := wss.NewWebSocketClient(ctx, c.remoteUrl.String(), httpClient, c.remoteHeaders)
 	if err != nil {
 		log.Fatal("establishing connection error:", err)
 	}
