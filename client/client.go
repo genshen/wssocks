@@ -147,9 +147,9 @@ func (c *client) Run() error {
 	httpClient, transport := NewHttpClient()
 
 	// loading and execute plugin
-	if clientPlugin.HasRedirectPlugin() {
+	if clientPlugin.HasRequestPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
-		if err := clientPlugin.RedirectPlugin.BeforeRequest(httpClient, c.remoteUrl, &c.remoteHeaders); err != nil {
+		if err := clientPlugin.RequestPlugin.BeforeRequest(httpClient, c.remoteUrl, &c.remoteHeaders); err != nil {
 			return err
 		}
 	}

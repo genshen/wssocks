@@ -7,7 +7,7 @@ import (
 	"net/url"
 )
 
-type ServerRedirect interface {
+type RequestPlugin interface {
 	// in the plugin, we may add http header and modify remote address.
 	BeforeRequest(hc *http.Client, url *url.URL, header *http.Header) error
 }
@@ -17,14 +17,14 @@ type VersionPlugin interface {
 }
 
 type Plugin struct {
-	RedirectPlugin ServerRedirect
+	RequestPlugin RequestPlugin
 	VersionPlugin  VersionPlugin
 }
 
-// check whether the redirect plugin has been added.
+// check whether the request plugin has been added.
 // this plugin can only be at most one instance.
-func (plugin *Plugin) HasRedirectPlugin() bool {
-	return plugin.RedirectPlugin != nil
+func (plugin *Plugin) HasRequestPlugin() bool {
+	return plugin.RequestPlugin != nil
 }
 
 func (plugin *Plugin) HasVersionPlugin() bool {
@@ -34,12 +34,12 @@ func (plugin *Plugin) HasVersionPlugin() bool {
 var clientPlugin Plugin
 
 // add a client plugin
-func AddPluginRedirect(redirect ServerRedirect) {
-	if clientPlugin.RedirectPlugin != nil {
+func AddPluginRedirect(redirect RequestPlugin) {
+	if clientPlugin.RequestPlugin != nil {
 		log.Fatal("redirect plugin has been occupied by another plugin.")
 		return
 	}
-	clientPlugin.RedirectPlugin = redirect
+	clientPlugin.RequestPlugin = redirect
 }
 
 func AddPluginVersion(verPlugin VersionPlugin) {
