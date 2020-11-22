@@ -146,20 +146,20 @@ func (c *client) Run() error {
 
 	httpClient, transport := NewHttpClient()
 
-	// loading and execute plugin
-	if clientPlugin.HasRequestPlugin() {
-		// in the plugin, we may add http header/dialer and modify remote address.
-		if err := clientPlugin.RequestPlugin.BeforeRequest(httpClient, c.remoteUrl, &c.remoteHeaders); err != nil {
-			return err
-		}
-	}
-
 	if c.remoteUrl.Scheme == "wss" && c.skipTLSVerify {
 		// ignore insecure verify
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		log.Warnln("Warning: you have skipped verification of the server's certificate chain and host name. " +
 			"Then client will accepts any certificate presented by the server and any host name in that certificate. " +
 			"In this mode, TLS is susceptible to man-in-the-middle attacks.")
+	}
+
+	// loading and execute plugin
+	if clientPlugin.HasRequestPlugin() {
+		// in the plugin, we may add http header/dialer and modify remote address.
+		if err := clientPlugin.RequestPlugin.BeforeRequest(httpClient, transport, c.remoteUrl, &c.remoteHeaders); err != nil {
+			return err
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
