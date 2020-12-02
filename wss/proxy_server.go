@@ -177,8 +177,8 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 	}
 
 	go func() {
-		writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.Background()}
-		if _, err := io.Copy(&writer, conn); err != nil {
+		writer := NewWebSocketWriter(&hub.ConcurrentWebSocket, id, context.Background())
+		if _, err := io.Copy(writer, conn); err != nil {
 			log.Error("copy error,", err)
 			e.done <- ChanDone{true, err}
 		}
@@ -253,11 +253,11 @@ func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr s
 	}
 	defer resp.Body.Close()
 
-	writer := WebSocketWriter{WSC: &hub.ConcurrentWebSocket, Id: id, Ctx: context.Background()}
+	writer := NewWebSocketWriter(&hub.ConcurrentWebSocket, id, context.Background())
 	var headerBuffer bytes.Buffer
 	HttpRespHeader(&headerBuffer, resp)
 	writer.Write(headerBuffer.Bytes())
-	if _, err := io.Copy(&writer, resp.Body); err != nil {
+	if _, err := io.Copy(writer, resp.Body); err != nil {
 		return fmt.Errorf("http body copy error: %w", err)
 	}
 	return nil

@@ -6,6 +6,7 @@ import (
 	"github.com/segmentio/ksuid"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
+	"sync"
 )
 
 type ConcurrentWebSocketInterface interface {
@@ -36,14 +37,39 @@ func (wsc *ConcurrentWebSocket) WriteProxyMessage(ctx context.Context, id ksuid.
 	return wsjson.Write(ctx, wsc.WsConn, &jsonData)
 }
 
-type WebSocketWriter struct {
+type webSocketWriter struct {
 	WSC  *ConcurrentWebSocket
 	Id   ksuid.KSUID // connection id.
 	Ctx  context.Context
 	Type int // type of trans data.
+	Mu   *sync.Mutex
 }
 
-func (writer *WebSocketWriter) Write(buffer []byte) (n int, err error) {
+func NewWebSocketWriter(wsc *ConcurrentWebSocket, id ksuid.KSUID, ctx context.Context) *webSocketWriter {
+	return &webSocketWriter{WSC: wsc, Id: id, Ctx: ctx}
+}
+
+func NewWebSocketWriterWithMutex(wsc *ConcurrentWebSocket, id ksuid.KSUID, ctx context.Context) *webSocketWriter {
+	return &webSocketWriter{WSC: wsc, Id: id, Ctx: ctx, Mu: &sync.Mutex{}}
+}
+
+func (writer *webSocketWriter) CloseWsWriter(cancel context.CancelFunc) {
+	if writer.Mu != nil {
+		writer.Mu.Lock()
+		defer writer.Mu.Unlock()
+	}
+	cancel()
+}
+
+func (writer *webSocketWriter) Write(buffer []byte) (n int, err error) {
+	if writer.Mu != nil {
+		writer.Mu.Lock()
+		defer writer.Mu.Unlock()
+	}
+	// make sure context is not Canceled/DeadlineExceeded before Write.
+	if writer.Ctx.Err() != nil {
+		return 0, writer.Ctx.Err()
+	}
 	if err := writer.WSC.WriteProxyMessage(writer.Ctx, writer.Id, TagData, buffer); err != nil {
 		return 0, err
 	} else {

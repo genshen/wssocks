@@ -84,8 +84,8 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// copy request body data
-	writer := WebSocketWriter{WSC: &client.wsc.ConcurrentWebSocket, Id: proxy.Id, Ctx: context.Background()}
-	if _, err := io.Copy(&writer, req.Body); err != nil {
+	writer := NewWebSocketWriter(&client.wsc.ConcurrentWebSocket, proxy.Id, context.Background())
+	if _, err := io.Copy(writer, req.Body); err != nil {
 		log.Error("write body error:", err)
 		client.wsc.RemoveProxy(proxy.Id)
 		if err := client.wsc.TellClose(proxy.Id); err != nil {
