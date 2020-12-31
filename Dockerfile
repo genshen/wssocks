@@ -24,10 +24,10 @@ COPY ./  /go/src/${PACKAGE}/
 COPY --from=web-builder web/build /go/src/github.com/genshen/wssocks/web-build/
 
 RUN cd ./src/${PACKAGE} \
-    && cd server \
+    && cd cmd/server \
     && statik -src=../web-build \
-    && cd ../ \
-    && go build -v -ldflags "${BUILD_FLAG}" -o wssocks ${PACKAGE} \
+    && cd ../../ \
+    && go build -ldflags "${BUILD_FLAG}" -o wssocks ${PACKAGE} \
     && go install
 
 ## copy binary

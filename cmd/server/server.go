@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/genshen/cmds"
-	_ "github.com/genshen/wssocks/server/statik"
+	_ "github.com/genshen/wssocks/cmd/server/statik"
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/status"
 	"github.com/rakyll/statik/fs"

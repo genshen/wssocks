@@ -22,7 +22,7 @@ No configures, no dependences, just a single executable including client and ser
 ```bash
 cd status-web; yarn install; yarn build; cd ../
 go get -u github.com/rakyll/statik
-cd server; statik --src=../status-web/build/; cd ../
+cd cmd/server; statik --src=../../status-web/build/; cd ../../
 go build
 go install
 ```

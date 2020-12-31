@@ -1,4 +1,4 @@
-server/statik
+cmd/server/statik
 
 # Gradle
 .idea/
