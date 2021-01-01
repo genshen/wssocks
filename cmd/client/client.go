@@ -1,12 +1,15 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/genshen/cmds"
 	cl "github.com/genshen/wssocks/client"
@@ -98,6 +101,10 @@ func (c *client) PreRun() error {
 }
 
 func (c *client) Run() error {
+	log.WithFields(log.Fields{
+		"remote": c.remoteUrl.String(),
+	}).Info("connecting to wssocks server.")
+
 	options := cl.Options{
 		Address:       c.address,
 		Http:          c.http,
@@ -107,5 +114,27 @@ func (c *client) Run() error {
 		ConnectionKey: c.key,
 		SkipTLSVerify: c.skipTLSVerify,
 	}
-	return options.StartClient()
+	hdl := cl.NewClientHandles()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
+	defer cancel()
+
+	wsc, err := hdl.CreateServerConn(&options, ctx)
+	if err != nil {
+		return err
+	}
+	// server connect successfully
+	log.WithFields(log.Fields{
+		"remote": c.remoteUrl.String(),
+	}).Info("connected to wssocks server.")
+	defer wsc.WSClose()
+
+	if err := hdl.NegotiateVersion(ctx, c.remote); err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	var once sync.Once
+	hdl.StartClient(&options, &once, &wg)
+	hdl.Wait(&once, &wg)
+	return nil
 }

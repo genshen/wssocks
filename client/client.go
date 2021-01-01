@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"github.com/genshen/wssocks/wss"
 	"github.com/genshen/wssocks/wss/term_view"
 	log "github.com/sirupsen/logrus"
@@ -56,12 +57,12 @@ type Handles struct {
 	cl         *wss.Client
 }
 
-func (c *Options) StartClient() error {
-	// start websocket connection (to remote server).
-	log.WithFields(log.Fields{
-		"remote": c.RemoteUrl.String(),
-	}).Info("connecting to wssocks server.")
+func NewClientHandles() *Handles {
+	return &Handles{}
+}
 
+// create a server websocket connection based on user options.
+func (hdl *Handles) CreateServerConn(c *Options, ctx context.Context) (*wss.WebSocketClient, error) {
 	if c.ConnectionKey != "" {
 		c.RemoteHeaders.Set("Key", c.ConnectionKey)
 	}
@@ -80,24 +81,23 @@ func (c *Options) StartClient() error {
 	if clientPlugin.HasRequestPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
 		if err := clientPlugin.RequestPlugin.BeforeRequest(httpClient, transport, c.RemoteUrl, &c.RemoteHeaders); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
-	defer cancel()
+	// start websocket connection (to remote server).
 	wsc, err := wss.NewWebSocketClient(ctx, c.RemoteUrl.String(), httpClient, c.RemoteHeaders)
 	if err != nil {
-		log.Fatal("establishing connection error:", err)
+		return nil, fmt.Errorf("establishing connection error: %w", err)
 	}
-	log.WithFields(log.Fields{
-		"remote": c.RemoteUrl.String(),
-	}).Info("connected to wssocks server.")
 	// todo chan for wsc and tcp accept
-	defer wsc.WSClose()
+	hdl.wsc = wsc
+	return wsc, nil
+}
 
+func (hdl *Handles) NegotiateVersion(ctx context.Context, remoteUrl string) error {
 	// negotiate version
-	if version, err := wss.ExchangeVersion(ctx, wsc.WsConn); err != nil {
+	if version, err := wss.ExchangeVersion(ctx, hdl.wsc.WsConn); err != nil {
 		return err
 	} else {
 		if clientPlugin.HasVersionPlugin() {
@@ -123,7 +123,7 @@ func (c *Options) StartClient() error {
 				}).Warning("different version of client and server wssocks")
 			}
 			if version.EnableStatusPage {
-				if endpoint, err := url.Parse(c.RemoteUrl.String() + "/status"); err != nil {
+				if endpoint, err := url.Parse(remoteUrl + "/status"); err != nil {
 					return err
 				} else {
 					endpoint.Scheme = "http"
@@ -134,13 +134,12 @@ func (c *Options) StartClient() error {
 			}
 		}
 	}
+	return nil
+}
 
-	var hdl Handles
-	hdl.wsc = wsc
-
-	var wg sync.WaitGroup
-	var once sync.Once // wait for one of go func
-	wg.Add(3)          // wait for all go func
+func (hdl *Handles) StartClient(c *Options, once *sync.Once, wg *sync.WaitGroup) {
+	// wait group wait for one of go func
+	wg.Add(3) // wait for all go func
 
 	// stop all connections or tasks, if one of tasks is finished.
 	closeAll := func() {
@@ -162,12 +161,12 @@ func (c *Options) StartClient() error {
 	go func() {
 		defer wg.Done()
 		defer once.Do(closeAll)
-		if err := wsc.ListenIncomeMsg(1 << 29); err != nil {
+		if err := hdl.wsc.ListenIncomeMsg(1 << 29); err != nil {
 			log.Error("error websocket read:", err)
 		}
 	}()
 	// send heart beats.
-	heartbeat, hbCtx := wss.NewHeartBeat(wsc)
+	heartbeat, hbCtx := wss.NewHeartBeat(hdl.wsc)
 	hdl.hb = heartbeat
 	go func() {
 		defer wg.Done()
@@ -206,7 +205,7 @@ func (c *Options) StartClient() error {
 		go func() {
 			defer wg.Done()
 			defer once.Do(closeAll)
-			handle := wss.NewHttpProxy(wsc, record)
+			handle := wss.NewHttpProxy(hdl.wsc, record)
 			hdl.httpServer = &http.Server{Addr: c.HttpAddr, Handler: &handle}
 			if err := hdl.httpServer.ListenAndServe(); err != nil {
 				log.Errorln(err)
@@ -219,7 +218,7 @@ func (c *Options) StartClient() error {
 	go func() {
 		defer wg.Done()
 		defer once.Do(closeAll)
-		if err := hdl.cl.ListenAndServe(record, wsc, c.Address, c.Http, func() {
+		if err := hdl.cl.ListenAndServe(record, hdl.wsc, c.Address, c.Http, func() {
 			if c.Http {
 				log.WithField("socks5 listen address", c.Address).
 					WithField("https listen address", c.Address).
@@ -232,7 +231,9 @@ func (c *Options) StartClient() error {
 			log.Errorln(err)
 		}
 	}()
+}
 
+func (hdl *Handles) Wait(once *sync.Once, wg *sync.WaitGroup) {
 	go func() {
 		firstInterrupt := true
 		c := make(chan os.Signal, 1)
@@ -272,5 +273,4 @@ func (c *Options) StartClient() error {
 	// 2. press twice, force exit.
 	// 3. one of tasks error, exit immediately.
 	// 4. close server, then client exit (the same as 3).
-	return nil
 }
