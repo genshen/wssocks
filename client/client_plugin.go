@@ -36,7 +36,7 @@ func (plugin *Plugin) HasVersionPlugin() bool {
 var clientPlugin Plugin
 
 // add a client plugin
-func AddPluginRedirect(redirect RequestPlugin) error {
+func AddPluginRequest(redirect RequestPlugin) error {
 	if clientPlugin.RequestPlugin != nil {
 		return ErrPluginOccupied
 	}
