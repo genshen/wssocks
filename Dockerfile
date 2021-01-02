@@ -25,7 +25,7 @@ COPY --from=web-builder web/build /go/src/github.com/genshen/wssocks/web-build/
 
 RUN cd ./src/${PACKAGE} \
     && cd cmd/server \
-    && statik -src=../web-build \
+    && statik -src=../../web-build \
     && cd ../../ \
     && go build -ldflags "${BUILD_FLAG}" -o wssocks ${PACKAGE} \
     && go install
