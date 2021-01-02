@@ -41,13 +41,13 @@ func NewHttpClient() (*http.Client, *http.Transport) {
 }
 
 type Options struct {
-	Address       string      // local listening address
-	Http          bool        // enable http and https proxy
-	HttpAddr      string      // listen address of http and https(if it is enabled)
-	RemoteUrl     *url.URL    // url of server
-	RemoteHeaders http.Header // parsed websocket headers (not presented in flag).
-	ConnectionKey string      // connection key for authentication
-	SkipTLSVerify bool        // skip TSL verify
+	LocalSocks5Addr string      // local listening address
+	HttpEnabled     bool        // enable http and https proxy
+	LocalHttpAddr   string      // listen address of http and https(if it is enabled)
+	RemoteUrl       *url.URL    // url of server
+	RemoteHeaders   http.Header // parsed websocket headers (not presented in flag).
+	ConnectionKey   string      // connection key for authentication
+	SkipTLSVerify   bool        // skip TSL verify
 }
 
 type Handles struct {
@@ -224,15 +224,15 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 	}
 
 	// http listening
-	if c.Http {
+	if c.HttpEnabled {
 		hdl.wg.Add(1)
-		log.WithField("http listen address", c.HttpAddr).
+		log.WithField("http listen address", c.LocalHttpAddr).
 			Info("listening on local address for incoming proxy requests.")
 		go func() {
 			defer hdl.wg.Done()
 			defer once.Do(closeAll)
 			handle := wss.NewHttpProxy(hdl.wsc, record)
-			hdl.httpServer = &http.Server{Addr: c.HttpAddr, Handler: &handle}
+			hdl.httpServer = &http.Server{Addr: c.LocalHttpAddr, Handler: &handle}
 			if err := hdl.httpServer.ListenAndServe(); err != nil {
 				log.Errorln(err)
 			}
@@ -244,13 +244,13 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 	go func() {
 		defer hdl.wg.Done()
 		defer once.Do(closeAll)
-		if err := hdl.cl.ListenAndServe(record, hdl.wsc, c.Address, c.Http, func() {
-			if c.Http {
-				log.WithField("socks5 listen address", c.Address).
-					WithField("https listen address", c.Address).
+		if err := hdl.cl.ListenAndServe(record, hdl.wsc, c.LocalSocks5Addr, c.HttpEnabled, func() {
+			if c.HttpEnabled {
+				log.WithField("socks5 listen address", c.LocalSocks5Addr).
+					WithField("https listen address", c.LocalSocks5Addr).
 					Info("listening on local address for incoming proxy requests.")
 			} else {
-				log.WithField("socks5 listen address", c.Address).
+				log.WithField("socks5 listen address", c.LocalSocks5Addr).
 					Info("listening on local address for incoming proxy requests.")
 			}
 		}); err != nil {

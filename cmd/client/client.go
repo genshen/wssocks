@@ -106,13 +106,13 @@ func (c *client) Run() error {
 	}).Info("connecting to wssocks server.")
 
 	options := cl.Options{
-		Address:       c.address,
-		Http:          c.http,
-		HttpAddr:      c.httpAddr,
-		RemoteUrl:     c.remoteUrl,
-		RemoteHeaders: c.remoteHeaders,
-		ConnectionKey: c.key,
-		SkipTLSVerify: c.skipTLSVerify,
+		LocalSocks5Addr: c.address,
+		HttpEnabled:     c.http,
+		LocalHttpAddr:   c.httpAddr,
+		RemoteUrl:       c.remoteUrl,
+		RemoteHeaders:   c.remoteHeaders,
+		ConnectionKey:   c.key,
+		SkipTLSVerify:   c.skipTLSVerify,
 	}
 	hdl := cl.NewClientHandles()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
