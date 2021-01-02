@@ -55,11 +55,36 @@ type Handles struct {
 	hb         *wss.HeartBeat
 	httpServer *http.Server
 	cl         *wss.Client
+	closed     bool
 	wg         *sync.WaitGroup
 }
 
 func NewClientHandles() *Handles {
-	return &Handles{wg: &sync.WaitGroup{}}
+	return &Handles{closed: true, wg: &sync.WaitGroup{}}
+}
+
+// send closing message to all running tasks
+func (hdl *Handles) NotifyClose(once *sync.Once, wait bool) {
+	if hdl.closed {
+		return
+	}
+	hdl.closed = true
+
+	// stop tasks in signal
+	once.Do(func() {
+		if hdl.cl != nil {
+			hdl.cl.Close(wait)
+		}
+		if hdl.httpServer != nil {
+			hdl.httpServer.Shutdown(context.TODO())
+		}
+		if hdl.hb != nil {
+			hdl.hb.Close()
+		}
+		if hdl.wsc != nil {
+			hdl.wsc.Close()
+		}
+	})
 }
 
 // create a server websocket connection based on user options.
@@ -232,6 +257,7 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 			log.Errorln(err)
 		}
 	}()
+	hdl.closed = false
 }
 
 func (hdl *Handles) Wait(once *sync.Once) {
@@ -245,23 +271,7 @@ func (hdl *Handles) Wait(once *sync.Once) {
 				if firstInterrupt {
 					log.Println("press CTRL+C to force exit")
 					firstInterrupt = false
-					go func() {
-						// stop tasks in signal
-						once.Do(func() {
-							if hdl.cl != nil {
-								hdl.cl.Close(true)
-							}
-							if hdl.httpServer != nil {
-								hdl.httpServer.Shutdown(context.TODO())
-							}
-							if hdl.hb != nil {
-								hdl.hb.Close()
-							}
-							if hdl.wsc != nil {
-								hdl.wsc.Close()
-							}
-						})
-					}()
+					hdl.NotifyClose(once, true)
 				} else {
 					os.Exit(0)
 				}
