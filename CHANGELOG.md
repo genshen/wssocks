@@ -1,4 +1,31 @@
 
+<a name="v0.5.0-rc.2"></a>
+## [v0.5.0-rc.2](https://github.com/genshen/wssocks/compare/v0.5.0-rc.1...v0.5.0-rc.2)
+
+> 2021-01-02
+
+### Build
+
+* **docker:** fix docker build error of "../web-build: no such file or directory"
+
+### Docs
+
+* **changelog:** add changelog for version 0.5.0-rc.2
+
+### Feat
+
+* **plugin:** return error, instead of calling log.Fatal, when the adding plugin exists
+* **version:** bump version to v0.5.0-rc.2 and increase version code
+
+### Fix
+
+* **server:** fix compiling error of no package "github.com/genshen/wssocks/cmd/server/statik"
+
+### Refactor
+
+* **plugin:** rename plugin api: AddPluginRedirect -> AddPluginRequest
+
+
 <a name="v0.5.0-rc.1"></a>
 ## [v0.5.0-rc.1](https://github.com/genshen/wssocks/compare/v0.5.0-beta.3...v0.5.0-rc.1)
 
@@ -13,10 +40,15 @@
 
 * **action:** fix building error in github action while performing static files to go code generation
 
+### Docs
+
+* **changelog:** add changelog for version 0.5.0-rc.1
+
 ### Feat
 
 * **client:** use http.DefaultTransport based Transport in http client for http dialing
 * **plugin:** we can change value of http transport (used for websocket dialing) in request plugin
+* **version:** bump version to v0.5.0-rc.1
 
 ### Fix
 
