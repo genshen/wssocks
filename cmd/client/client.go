@@ -132,9 +132,8 @@ func (c *client) Run() error {
 		return err
 	}
 
-	var wg sync.WaitGroup
 	var once sync.Once
-	hdl.StartClient(&options, &once, &wg)
-	hdl.Wait(&once, &wg)
+	hdl.StartClient(&options, &once)
+	hdl.Wait(&once)
 	return nil
 }
