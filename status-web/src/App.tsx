@@ -24,13 +24,13 @@ function App() {
         </Col>
       </Row>
     )
-  } else if (error) {
+  } else if (error || !data) {
     content = (
       <Row>
         <Col offset={{ md: 3 }} md={6}>
           <Alert
             intent="danger"
-            title={error.message}
+            title={error? error.message: 'Error while loading server status.'}
           />
         </Col>
       </Row>
