@@ -1,8 +1,8 @@
 package client
 
 import (
+	"errors"
 	"github.com/genshen/wssocks/wss"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
 )
@@ -18,8 +18,10 @@ type VersionPlugin interface {
 
 type Plugin struct {
 	RequestPlugin RequestPlugin
-	VersionPlugin  VersionPlugin
+	VersionPlugin VersionPlugin
 }
+
+var ErrPluginOccupied = errors.New("the plugin is occupied by another plugin")
 
 // check whether the request plugin has been added.
 // this plugin can only be at most one instance.
@@ -34,18 +36,18 @@ func (plugin *Plugin) HasVersionPlugin() bool {
 var clientPlugin Plugin
 
 // add a client plugin
-func AddPluginRedirect(redirect RequestPlugin) {
+func AddPluginRedirect(redirect RequestPlugin) error {
 	if clientPlugin.RequestPlugin != nil {
-		log.Fatal("redirect plugin has been occupied by another plugin.")
-		return
+		return ErrPluginOccupied
 	}
 	clientPlugin.RequestPlugin = redirect
+	return nil
 }
 
-func AddPluginVersion(verPlugin VersionPlugin) {
+func AddPluginVersion(verPlugin VersionPlugin) error {
 	if clientPlugin.VersionPlugin != nil {
-		log.Fatal("version plugin has been occupied by another plugin.")
-		return
+		return ErrPluginOccupied
 	}
 	clientPlugin.VersionPlugin = verPlugin
+	return nil
 }
