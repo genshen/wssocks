@@ -28,7 +28,7 @@ jobs:
       run: go mod download && go get -u github.com/rakyll/statik
 
     - name: Static->GO generation
-      run: cd server && statik --src=../status-web/build/ && cd ../
+      run: cd cmd/server && statik --src=../../status-web/build/ && cd ../../
 
     - name: Build
       run: go build -v .
