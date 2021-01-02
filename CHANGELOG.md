@@ -1,4 +1,38 @@
 
+<a name="v0.5.0-rc.1"></a>
+## [v0.5.0-rc.1](https://github.com/genshen/wssocks/compare/v0.5.0-beta.3...v0.5.0-rc.1)
+
+> 2021-01-02
+
+### Build
+
+* **npm:** upgrade npm dependencies
+* **status:** update dependencies (axios and evergreen-ui) for status page
+
+### Ci
+
+* **action:** fix building error in github action while performing static files to go code generation
+
+### Feat
+
+* **client:** use http.DefaultTransport based Transport in http client for http dialing
+* **plugin:** we can change value of http transport (used for websocket dialing) in request plugin
+
+### Fix
+
+* **client:** fix unexpected closing of client by using lock to Write and context canceling
+* **status:** fix building error of "data Object is possibly 'undefined'."
+
+### Refactor
+
+* **cli:** move/split cli implementation of client and server to cmd directory
+* **client:** use more semantic variable names in client Options
+* **client:** move client connections closing to func `NotifyClose` in struct Handles
+* **client:** move sync.WaiitGroup passed to StartClient and Wait as a field of type Handles
+* **client:** split client setting-up func StartClient into multiple function calls
+* **plugin:** rename plugin ServerRedirect to RequestPlugin
+
+
 <a name="v0.5.0-beta.3"></a>
 ## [v0.5.0-beta.3](https://github.com/genshen/wssocks/compare/v0.5.0-beta.2...v0.5.0-beta.3)
 
@@ -12,6 +46,14 @@
 ### Chore
 
 * add go code report badge
+
+### Docs
+
+* **changelog:** add changelog for version 0.5.0-beta.3
+
+### Feat
+
+* **version:** bump version to v0.5.0-beta.3
 
 ### Fix
 
