@@ -103,6 +103,13 @@ func (hdl *Handles) CreateServerConn(c *Options, ctx context.Context) (*wss.WebS
 			"In this mode, TLS is susceptible to man-in-the-middle attacks.")
 	}
 
+	// load and use option plugin
+	if clientPlugin.HasOptionPlugin() {
+		if err := clientPlugin.OptionPlugin.OnOptionSet(*c); err != nil {
+			return nil, err
+		}
+	}
+
 	// loading and execute plugin
 	if clientPlugin.HasRequestPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
