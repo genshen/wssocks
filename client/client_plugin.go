@@ -23,7 +23,7 @@ type VersionPlugin interface {
 }
 
 // Plugins is a collection of all possible plugins on client
-type Plugin struct {
+type Plugins struct {
 	OptionPlugin  OptionPlugin
 	RequestPlugin RequestPlugin
 	VersionPlugin VersionPlugin
@@ -33,21 +33,22 @@ var ErrPluginOccupied = errors.New("the plugin is occupied by another plugin")
 
 // check whether the option plugin has been added.
 // this plugin can only be at most one instance.
-func (plugin *Plugin) HasOptionPlugin() bool {
+func (plugin *Plugins) HasOptionPlugin() bool {
 	return plugin.OptionPlugin != nil
 }
 
 // check whether the request plugin has been added.
 // this plugin can only be at most one instance.
-func (plugin *Plugin) HasRequestPlugin() bool {
+func (plugin *Plugins) HasRequestPlugin() bool {
 	return plugin.RequestPlugin != nil
 }
 
-func (plugin *Plugin) HasVersionPlugin() bool {
+func (plugin *Plugins) HasVersionPlugin() bool {
 	return plugin.VersionPlugin != nil
 }
 
-var clientPlugin Plugin
+var clientPlugin Plugins
+
 // add an option plugin
 func AddPluginOption(opPlugin OptionPlugin) error {
 	if clientPlugin.OptionPlugin != nil {
@@ -57,7 +58,7 @@ func AddPluginOption(opPlugin OptionPlugin) error {
 	return nil
 }
 
-// add a client plugin
+// add a request plugin
 func AddPluginRequest(redirect RequestPlugin) error {
 	if clientPlugin.RequestPlugin != nil {
 		return ErrPluginOccupied
@@ -66,6 +67,7 @@ func AddPluginRequest(redirect RequestPlugin) error {
 	return nil
 }
 
+// add a version plugin
 func AddPluginVersion(verPlugin VersionPlugin) error {
 	if clientPlugin.VersionPlugin != nil {
 		return ErrPluginOccupied
