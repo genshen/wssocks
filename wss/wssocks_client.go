@@ -3,6 +3,7 @@ package wss
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -95,7 +96,7 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 
 		c, err := tcpl.Accept()
 		if err != nil {
-			return err
+			return fmt.Errorf("tcp accept error: %w", err)
 		}
 
 		go func() {
@@ -105,7 +106,7 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 			// In reply, we can get proxy type, target address and first send data.
 			firstSendData, proxyType, addr, err := client.Reply(conn, enableHttp)
 			if err != nil {
-				log.Error(err)
+				log.Error("reply error: ", err)
 			}
 			client.wgClose.Add(1)
 			defer client.wgClose.Done()
@@ -116,7 +117,7 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 
 			// on connection established, copy data now.
 			if err := client.transData(wsc, conn, firstSendData, proxyType, addr); err != nil {
-				log.Error(err)
+				log.Error("trans error: ", err)
 			}
 		}()
 	}
