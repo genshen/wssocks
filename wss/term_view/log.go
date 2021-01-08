@@ -22,7 +22,9 @@ func NewPLog(cr *wss.ConnRecord) *ProgressLog {
 	return &plog
 }
 
-// update progress log.
+// set progress log(connection table),
+// the connection table is write into p.Write
+// (p.Write is a bytes buffer, only really output to screen when calling Flush).
 func (p *ProgressLog) SetLogBuffer(r *wss.ConnRecord) {
 	_, terminalRows, err := terminal.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
