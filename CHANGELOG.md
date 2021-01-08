@@ -1,4 +1,32 @@
 
+<a name="v0.5.0-rc.3"></a>
+## [v0.5.0-rc.3](https://github.com/genshen/wssocks/compare/v0.5.0-rc.2...v0.5.0-rc.3)
+
+> 2021-01-08
+
+### Chore
+
+* **logs:** add description to func ProgressLog.SetLogBuffer
+
+### Docs
+
+* **changelog:** add changelog for version 0.5.0-rc.3
+
+### Feat
+
+* **client:** better error when there is error in Client.ListenAndServe (in wss/wssocks_client.go)
+* **plugin:** add "connection option" plugin interface
+* **version:** bump version t0 v0.5.0-rc.3
+
+### Refactor
+
+* **plugin:** rename struct type "Plugin" to "Plugins"
+
+### Revert
+
+* **version:** set protocol version back to 0x004, because it has been set in v0.5.0-beta
+
+
 <a name="v0.5.0-rc.2"></a>
 ## [v0.5.0-rc.2](https://github.com/genshen/wssocks/compare/v0.5.0-rc.1...v0.5.0-rc.2)
 
