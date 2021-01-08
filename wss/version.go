@@ -7,7 +7,7 @@ import (
 )
 
 // version of protocol.
-const VersionCode = 0x005
+const VersionCode = 0x004
 const CompVersion = 0x003
 const CoreVersion = "0.5.0-rc.2"
 
