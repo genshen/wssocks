@@ -1,4 +1,27 @@
 
+<a name="v0.5.0"></a>
+## [v0.5.0](https://github.com/genshen/wssocks/compare/v0.5.0-rc.3...v0.5.0)
+
+> 2021-01-25
+
+### Build
+
+* **docker:** upgrade go/node/alpine versions in Dockerfile for docker building
+* **npm:** bump react dependency of status web page to v17 via cra, and enable pwa
+
+### Ci
+
+* **gh-action:** upgrade go and node versions in github action building
+
+### Docs
+
+* **changelog:** add changelog for version 0.5.0
+
+### Feat
+
+* **version:** bump version to v0.5.0
+
+
 <a name="v0.5.0-rc.3"></a>
 ## [v0.5.0-rc.3](https://github.com/genshen/wssocks/compare/v0.5.0-rc.2...v0.5.0-rc.3)
 
@@ -16,7 +39,7 @@
 
 * **client:** better error when there is error in Client.ListenAndServe (in wss/wssocks_client.go)
 * **plugin:** add "connection option" plugin interface
-* **version:** bump version t0 v0.5.0-rc.3
+* **version:** bump version to v0.5.0-rc.3
 
 ### Refactor
 
