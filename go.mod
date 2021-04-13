@@ -7,7 +7,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12
 	github.com/rakyll/statik v0.1.7
 	github.com/segmentio/ksuid v1.0.3
-	github.com/sirupsen/logrus v1.7.0
-	golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0
-	nhooyr.io/websocket v1.8.6
+	github.com/sirupsen/logrus v1.8.1
+	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
+	nhooyr.io/websocket v1.8.7
 )
