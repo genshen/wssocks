@@ -1,5 +1,6 @@
 cmd/server/statik
-
+wssocks
+status-web/.eslintcache
 # Gradle
 .idea/
 

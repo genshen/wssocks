@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/segmentio/ksuid"
 	"net/http"
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
 	"sync"
 	"time"
+
+	"github.com/segmentio/ksuid"
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 )
 
 // WebSocketClient is a collection of proxy clients.
@@ -92,6 +93,7 @@ func (wsc *WebSocketClient) RemoveProxy(id ksuid.KSUID) {
 	}
 }
 
+// 客户端接收数据
 // listen income websocket messages and dispatch to different proxies.
 func (wsc *WebSocketClient) ListenIncomeMsg(readLimit int64) error {
 	ctx, can := context.WithCancel(context.Background())

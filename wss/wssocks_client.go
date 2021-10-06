@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/segmentio/ksuid"
-	log "github.com/sirupsen/logrus"
-	"io"
 	"net"
 	"sync"
+
+	"github.com/segmentio/ksuid"
+	log "github.com/sirupsen/logrus"
 )
 
 var StoppedError = errors.New("listener stopped")
@@ -73,7 +73,7 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool) ([]byte, int, string
 }
 
 // listen on local address:port and forward socks5 requests to wssocks server.
-func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
+func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, wsc2 *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
 	netListener, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -115,60 +115,106 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, a
 			record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
 			defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
 
+			// 转换数据，看怎么分配wsc和wsc2
 			// on connection established, copy data now.
-			if err := client.transData(wsc, conn, firstSendData, proxyType, addr); err != nil {
+			if err := client.transData(wsc, wsc2, conn, firstSendData, proxyType, addr); err != nil {
 				log.Error("trans error: ", err)
 			}
 		}()
 	}
 }
 
-func (client *Client) transData(wsc *WebSocketClient, conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
+func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
 	type Done struct {
 		tell bool
 		err  error
 	}
-	done := make(chan Done, 2)
+	done := make(chan Done, 3)
 	// defer close(done)
 
 	// create a with proxy with callback func
-	proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) {
+	proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata
 		if _, err := conn.Write(data.Data); err != nil {
 			done <- Done{true, err}
 		}
-	}, func(id ksuid.KSUID, tell bool) {
+	}, func(id ksuid.KSUID, tell bool) { //onclosed
 		done <- Done{tell, nil}
-	}, func(id ksuid.KSUID, err error) {
+	}, func(id ksuid.KSUID, err error) { //onerror
 		if err != nil {
 			done <- Done{true, err}
 		}
 	})
 
+	// 第二条线
+	proxy2 := wsc2.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata
+		fmt.Println("ondata")
+		//todo conn要换成本地buffer来排序
+		if _, err := conn.Write(data.Data); err != nil {
+			done <- Done{true, err}
+		}
+	}, func(id ksuid.KSUID, tell bool) { //onclosed
+		fmt.Println("onclosed")
+		done <- Done{tell, nil}
+	}, func(id ksuid.KSUID, err error) { //onerror
+		fmt.Println("onerror")
+		if err != nil {
+			done <- Done{true, err}
+		}
+	})
+
+	// 让各自连接准备开始
+	proxy.SayID(wsc, proxy.Id)
+	proxy2.SayID(wsc2, proxy.Id) //都发送主id
+	fmt.Println("client say", proxy.Id, proxy2.Id)
+
+	// 给主链接顺序
+	sorted := []ksuid.KSUID{proxy.Id, proxy2.Id}
+
+	// 告知服务端目标地址和协议，还有首次发送的数据包, 额外告知有几路以及顺序如何
 	// tell server to establish connection
-	if err := proxy.Establish(wsc, firstSendData, proxyType, addr); err != nil {
+	fmt.Println("firstSend", firstSendData)
+	if err := proxy.Establish(wsc, firstSendData, proxyType, addr, sorted); err != nil {
 		wsc.RemoveProxy(proxy.Id)
 		if err := wsc.TellClose(proxy.Id); err != nil {
 			log.Error("close error", err)
 		}
 		return err
 	}
+	// 第二条线路不需要Establish因为不用和目标机器连接
 
 	// trans incoming data from proxy client application.
 	ctx, cancel := context.WithCancel(context.Background())
 	writer := NewWebSocketWriterWithMutex(&wsc.ConcurrentWebSocket, proxy.Id, ctx)
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	writer2 := NewWebSocketWriterWithMutex(&wsc2.ConcurrentWebSocket, proxy2.Id, ctx2)
+
+	qHub := NewQueueHub()
+	qHub.addWriter(proxy.Id, proxy.Id, writer)
+	qHub.addWriter(proxy.Id, proxy2.Id, writer2)
+	qq := qHub.GetById(proxy.Id)
+	qq.SetSort(sorted)
+	go qq.Send()
+	defer qq.Close()
+
 	go func() {
-		_, err := io.Copy(writer, conn)
+		_, err := copyBuffer(qq, conn) //io.Copy(qq, conn) //client.copyBuffer(qq, conn)
 		if err != nil {
 			log.Error("write error: ", err)
 		}
 		done <- Done{true, nil}
 	}()
-	defer writer.CloseWsWriter(cancel) // cancel data writing
+	defer writer.CloseWsWriter(cancel)  // cancel data writing
+	defer writer.CloseWsWriter(cancel2) // cancel data writing
 
 	d := <-done
 	wsc.RemoveProxy(proxy.Id)
-	if d.tell {
+	wsc2.RemoveProxy(proxy2.Id)
+	if d.tell { //出错了
 		if err := wsc.TellClose(proxy.Id); err != nil {
+			return err
+		}
+		if err := wsc2.TellClose(proxy2.Id); err != nil {
 			return err
 		}
 	}

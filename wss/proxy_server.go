@@ -1,21 +1,28 @@
 package wss
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/segmentio/ksuid"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
-	"net/http"
-	"nhooyr.io/websocket"
 	"time"
+
+	"github.com/segmentio/ksuid"
+	log "github.com/sirupsen/logrus"
+	"nhooyr.io/websocket"
 )
+
+var serverQueueHub *queueHub
+
+var outQueueHub *queueHub2
+
+func init() {
+	serverQueueHub = NewQueueHub()
+	outQueueHub = NewQueueHub2()
+}
 
 type Connector struct {
 	Conn io.ReadWriteCloser
@@ -26,7 +33,7 @@ type ProxyEstablish interface {
 	establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, data []byte) error
 
 	// data from client todo data with type
-	onData(data ClientData) error
+	onData(id ksuid.KSUID, data ClientData) error
 
 	// close connection
 	// tell: whether to send close message to proxy client
@@ -50,20 +57,44 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 		Data: &socketData,
 	}
 	if err := json.Unmarshal(data, &socketStream); err != nil {
+		fmt.Println(err)
 		return err
 	}
 
 	// parsing id
 	id, err := ksuid.Parse(socketStream.Id)
 	if err != nil {
+		fmt.Println(err)
 		return err
+	}
+	if socketStream.Type != WsTpBeats {
+		fmt.Println("dispatch", id, socketStream.Type)
 	}
 
 	switch socketStream.Type {
 	case WsTpBeats: // heart beats
 	case WsTpClose: // closed by client
 		return hub.CloseProxyConn(id)
-	case WsTpEst: // establish
+	case WsTpHi:
+		var masterId string
+		if err := json.Unmarshal(socketData, &masterId); err != nil {
+			return err
+		}
+		writer := NewWebSocketWriter(&hub.ConcurrentWebSocket, id, context.Background())
+		masterKSUID, err := ksuid.Parse(masterId)
+		if err != nil {
+			return err
+		}
+		serverQueueHub.addWriter(masterKSUID, id, writer)
+		serverQueueHub.Incre(masterKSUID)
+		serverQueueHub.TrySend(masterKSUID)
+
+		outQueueHub.addBufQueue(id, masterKSUID)
+		outQueueHub.Incre(masterKSUID)
+		outQueueHub.TrySend(masterKSUID, nil)
+		outQueueHub.SetMap(id, masterKSUID)
+		fmt.Println("get client say", id)
+	case WsTpEst: // establish 收到连接请求
 		var proxyEstMsg ProxyEstMessage
 		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
 			return err
@@ -83,34 +114,34 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 				estData = decodedBytes
 			}
 		}
+		serverQueueHub.GetById(id).SetSort(proxyEstMsg.Sorted)
+		outQueueHub.GetById(id).SetSort(proxyEstMsg.Sorted)
+		// 与外面建立连接，并把外面返回的数据放回websocket
 		go establishProxy(hub, ProxyRegister{id, proxyEstMsg.Type, proxyEstMsg.Addr, estData})
-	case WsTpData:
+	case WsTpData: //从websocket收到数据发送到外面
 		var requestMsg ProxyData
 		if err := json.Unmarshal(socketData, &requestMsg); err != nil {
+			fmt.Println("json", err)
 			return err
 		}
 
-		if proxy := hub.GetProxyById(id); proxy != nil {
-			// write income data from websocket to TCP connection
-			if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
-				log.Error("base64 decode error,", err)
-				return err
-			} else {
-				return proxy.ProxyIns.onData(ClientData{Tag: requestMsg.Tag, Data: decodeBytes})
-			}
+		if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
+			log.Error("base64 decode error,", err)
+			return err
+		} else {
+			fmt.Println("bytes", id, len(decodeBytes), string(decodeBytes))
+			// 传输数据
+			outQueueHub.GetById(id).setData(decodeBytes)
+			return nil
 		}
-		return nil
+
 	}
 	return nil
 }
 
 func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
 	var e ProxyEstablish
-	if proxyMeta._type == ProxyTypeHttp {
-		e = &HttpProxyEst{}
-	} else {
-		e = &DefaultProxyEst{}
-	}
+	e = &DefaultProxyEst{}
 
 	err := e.establish(hub, proxyMeta.id, proxyMeta._type, proxyMeta.addr, proxyMeta.withData)
 	if err == nil {
@@ -131,14 +162,11 @@ type ChanDone struct {
 
 // interface implementation for socks5 and https proxy.
 type DefaultProxyEst struct {
-	done    chan ChanDone
-	tcpConn net.Conn
+	done chan ChanDone
+	//tcpConn net.Conn
 }
 
-func (e *DefaultProxyEst) onData(data ClientData) error {
-	if _, err := e.tcpConn.Write(data.Data); err != nil {
-		e.done <- ChanDone{true, err}
-	}
+func (e *DefaultProxyEst) onData(id ksuid.KSUID, data ClientData) error {
 	return nil
 }
 
@@ -153,7 +181,8 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 	if err != nil {
 		return err
 	}
-	e.tcpConn = conn
+	//收集请求发送出去
+	outQueueHub.TrySend(id, conn)
 	defer conn.Close()
 
 	e.done = make(chan ChanDone, 2)
@@ -176,9 +205,12 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 		}
 	}
 
+	serverQueueHub.TrySend(id)
+	writer := serverQueueHub.GetById(id)
 	go func() {
-		writer := NewWebSocketWriter(&hub.ConcurrentWebSocket, id, context.Background())
-		if _, err := io.Copy(writer, conn); err != nil {
+		// 往回传
+		_, err := copyBuffer(writer, conn.(*net.TCPConn))
+		if err != nil {
 			log.Error("copy error,", err)
 			e.done <- ChanDone{true, err}
 		}
@@ -191,74 +223,36 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 	return d.err
 }
 
-type HttpProxyEst struct {
-	bodyReadCloser *BufferedWR
-}
-
-func (h *HttpProxyEst) onData(data ClientData) error {
-	if data.Tag == TagNoMore {
-		return h.bodyReadCloser.Close() // close due to no more data.
-	}
-	if _, err := h.bodyReadCloser.Write(data.Data); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (h *HttpProxyEst) Close(tell bool) error {
-	return h.bodyReadCloser.Close() // close from client
-}
-
-func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr string, header []byte) error {
-	if header == nil {
-		hub.tellClosed(id)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		_ = hub.WriteProxyMessage(ctx, id, TagEstErr, nil)
-		return errors.New("http header empty")
-	}
-
-	closed := make(chan bool)
-	client := make(chan ClientData, 2) // for http at most 2 data buffers are needed(http body, TagNoMore tag).
-	defer close(closed)
-	defer close(client)
-
-	hub.addNewProxy(&ProxyServer{Id: id, ProxyIns: h})
-	bodyReadCloser := NewBufferWR()
-	defer hub.RemoveProxy(id)
-	defer func() {
-		if !bodyReadCloser.isClosed() { // if it is not closed by client.
-			hub.tellClosed(id) // todo
+// copyBuffer 传输数据
+func copyBuffer(iow io.Writer, conn *net.TCPConn) (written int64, err error) {
+	//如果设置过大会耗内存高，4k比较合理
+	//size := 4 * 1024
+	size := 10 //临时测试
+	buf := make([]byte, size)
+	i := 0
+	for {
+		i++
+		nr, er := conn.Read(buf)
+		if nr > 0 {
+			fmt.Println("copy read", nr)
+			var nw int
+			var ew error
+			nw, ew = iow.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = fmt.Errorf("#1 %s", ew.Error())
+				break
+			}
+			if nr != nw {
+				err = fmt.Errorf("#2 %s", io.ErrShortWrite.Error())
+				break
+			}
 		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	if err := hub.ConcurrentWebSocket.WriteProxyMessage(ctx, id, TagEstOk, nil); err != nil {
-		return err
+		if er != nil {
+			break
+		}
 	}
-
-	// get http request by header bytes.
-	bufferHeader := bufio.NewReader(bytes.NewBuffer(header))
-	req, err := http.ReadRequest(bufferHeader)
-	if err != nil {
-		return err
-	}
-	req.Body = bodyReadCloser
-
-	// read request and copy response back
-	resp, err := http.DefaultTransport.RoundTrip(req)
-	if err != nil {
-		return fmt.Errorf("transport error: %w", err)
-	}
-	defer resp.Body.Close()
-
-	writer := NewWebSocketWriter(&hub.ConcurrentWebSocket, id, context.Background())
-	var headerBuffer bytes.Buffer
-	HttpRespHeader(&headerBuffer, resp)
-	writer.Write(headerBuffer.Bytes())
-	if _, err := io.Copy(writer, resp.Body); err != nil {
-		return fmt.Errorf("http body copy error: %w", err)
-	}
-	return nil
+	return written, err
 }

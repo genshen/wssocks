@@ -3,10 +3,11 @@ package wss
 import (
 	"context"
 	"encoding/base64"
+	"sync"
+
 	"github.com/segmentio/ksuid"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
-	"sync"
 )
 
 type ConcurrentWebSocketInterface interface {

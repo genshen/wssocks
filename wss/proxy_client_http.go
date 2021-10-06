@@ -68,7 +68,7 @@ func (client *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	host, _ := client.parseUrl(req.Method, req.Proto, req.URL)
 	HttpRequestHeader(&headerBuffer, req)
 
-	if err := proxy.Establish(client.wsc, headerBuffer.Bytes(), ProxyTypeHttp, host); err != nil { // fixme default port
+	if err := proxy.Establish(client.wsc, headerBuffer.Bytes(), ProxyTypeHttp, host, []ksuid.KSUID{proxy.Id}); err != nil { // fixme default port
 		log.Error("write header error:", err)
 		client.wsc.RemoveProxy(proxy.Id)
 		if err := client.wsc.TellClose(proxy.Id); err != nil {

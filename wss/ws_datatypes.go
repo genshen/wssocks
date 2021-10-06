@@ -3,8 +3,9 @@ package wss
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/segmentio/ksuid"
 	"sync"
+
+	"github.com/segmentio/ksuid"
 )
 
 const (
@@ -13,6 +14,7 @@ const (
 	WsTpClose = "finish"
 	WsTpData  = "data"
 	WsTpEst   = "est" // establish
+	WsTpHi    = "sayhi"
 )
 
 // write data to WebSocket server or client
@@ -67,8 +69,9 @@ type ProxyData struct {
 
 // Proxy message for establishing connection
 type ProxyEstMessage struct {
-	Type       int    `json:"proxy_type"`
-	Addr       string `json:"addr"`
-	WithData   bool   `json:"with_data"`
-	DataBase64 string `json:"base64"` // establish with initialized data.
+	Type       int           `json:"proxy_type"`
+	Addr       string        `json:"addr"`
+	Sorted     []ksuid.KSUID `json:"sorted"`
+	WithData   bool          `json:"with_data"`
+	DataBase64 string        `json:"base64"` // establish with initialized data.
 }

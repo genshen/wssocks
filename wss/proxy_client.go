@@ -30,12 +30,29 @@ type ServerData struct {
 	Data []byte
 }
 
-// tell wssocks proxy server to establish a proxy connection by sending server 
+// tell wssocks proxy server to establish a proxy connection by sending server
 // proxy address, type, initial data.
-func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, proxyType int, addr string) error {
+func (p *ProxyClient) SayID(wsc *WebSocketClient, id ksuid.KSUID) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := wsjson.Write(ctx, wsc.WsConn, &WebSocketMessage{
+		Type: WsTpHi,
+		Id:   p.Id.String(),
+		Data: id.String(),
+	}); err != nil {
+		log.Error("json error:", err)
+		return err
+	}
+	return nil
+}
+
+// tell wssocks proxy server to establish a proxy connection by sending server
+// proxy address, type, initial data.
+func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, proxyType int, addr string, sorted []ksuid.KSUID) error {
 	estMsg := ProxyEstMessage{
 		Type:     proxyType,
 		Addr:     addr,
+		Sorted:   sorted,
 		WithData: false,
 	}
 	if firstSendData != nil {
