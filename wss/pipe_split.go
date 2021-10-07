@@ -8,9 +8,18 @@ import (
 	"github.com/segmentio/ksuid"
 )
 
+var pipeDebug bool = false
+
 type tunnel struct {
 	//tcpConn net.Conn
 	writer io.Writer
+}
+
+func pipePrintln(a ...interface{}) (n int, err error) {
+	if !pipeDebug {
+		return 0, nil
+	}
+	return fmt.Println(a...)
 }
 
 type queue struct {
@@ -23,11 +32,11 @@ type queue struct {
 }
 
 func (q *queue) Write(buffer []byte) (n int, err error) {
-	fmt.Println("write to chan", q.id, string(buffer))
+	//pipePrintln("write to chan", q.id, string(buffer))
 	b := make([]byte, len(buffer))
 	copy(b, buffer)
 	q.buffer <- b
-	fmt.Println("write ok", string(buffer))
+	//pipePrintln("write ok", string(buffer))
 	return len(buffer), nil
 }
 
@@ -39,10 +48,10 @@ func (q *queue) Send() {
 		for _, id := range q.sorted {
 			t := q.tunnel[id]
 			data := <-q.buffer
-			fmt.Println("tunnel send:", id, string(data), q.id)
+			pipePrintln("split send to:", id, "data:", string(data))
 			_, e := t.writer.Write(data)
 			if e != nil {
-				fmt.Println("writer.Write", e.Error())
+				pipePrintln("writer.Write", e.Error())
 				return
 			}
 		}
@@ -123,7 +132,7 @@ func (h *queueHub) TrySend(id ksuid.KSUID) bool {
 	if c, ok := h.counter[id]; ok {
 		if q, ok := h.queue[id]; ok {
 			if c == int64(len(q.sorted)) {
-				fmt.Println("tunnel try", c, q.sorted)
+				pipePrintln("split try", q.sorted)
 				h.status[id] = true
 				go q.Send()
 				return true

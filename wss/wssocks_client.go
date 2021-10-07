@@ -13,6 +13,14 @@ import (
 
 var StoppedError = errors.New("listener stopped")
 
+var clientQueueHub *queueHub
+var clientBackHub *queueHub2
+
+func init() {
+	clientQueueHub = NewQueueHub()
+	clientBackHub = NewQueueHub2()
+}
+
 // client part of wssocks
 type Client struct {
 	tcpl    *net.TCPListener
@@ -134,8 +142,12 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 
 	// create a with proxy with callback func
 	proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata
-		if _, err := conn.Write(data.Data); err != nil {
-			done <- Done{true, err}
+		if data.Tag == TagHandshake {
+			if _, err := conn.Write(data.Data); err != nil {
+				clientBackHub.GetById(id).Close()
+			}
+		} else {
+			clientBackHub.GetById(id).setData(data.Data)
 		}
 	}, func(id ksuid.KSUID, tell bool) { //onclosed
 		done <- Done{tell, nil}
@@ -147,16 +159,16 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 
 	// 第二条线
 	proxy2 := wsc2.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata
-		fmt.Println("ondata")
-		//todo conn要换成本地buffer来排序
-		if _, err := conn.Write(data.Data); err != nil {
-			done <- Done{true, err}
+		if data.Tag == TagHandshake {
+			if _, err := conn.Write(data.Data); err != nil {
+				clientBackHub.GetById(id).Close()
+			}
+		} else {
+			clientBackHub.GetById(id).setData(data.Data)
 		}
 	}, func(id ksuid.KSUID, tell bool) { //onclosed
-		fmt.Println("onclosed")
 		done <- Done{tell, nil}
 	}, func(id ksuid.KSUID, err error) { //onerror
-		fmt.Println("onerror")
 		if err != nil {
 			done <- Done{true, err}
 		}
@@ -165,14 +177,14 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	// 让各自连接准备开始
 	proxy.SayID(wsc, proxy.Id)
 	proxy2.SayID(wsc2, proxy.Id) //都发送主id
-	fmt.Println("client say", proxy.Id, proxy2.Id)
+	//fmt.Println("client say", proxy.Id, proxy2.Id)
 
 	// 给主链接顺序
 	sorted := []ksuid.KSUID{proxy.Id, proxy2.Id}
 
 	// 告知服务端目标地址和协议，还有首次发送的数据包, 额外告知有几路以及顺序如何
 	// tell server to establish connection
-	fmt.Println("firstSend", firstSendData)
+	//fmt.Println("firstSend", firstSendData)
 	if err := proxy.Establish(wsc, firstSendData, proxyType, addr, sorted); err != nil {
 		wsc.RemoveProxy(proxy.Id)
 		if err := wsc.TellClose(proxy.Id); err != nil {
@@ -189,13 +201,24 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	writer2 := NewWebSocketWriterWithMutex(&wsc2.ConcurrentWebSocket, proxy2.Id, ctx2)
 
-	qHub := NewQueueHub()
-	qHub.addWriter(proxy.Id, proxy.Id, writer)
-	qHub.addWriter(proxy.Id, proxy2.Id, writer2)
-	qq := qHub.GetById(proxy.Id)
+	clientQueueHub.addWriter(proxy.Id, proxy.Id, writer)
+	clientQueueHub.addWriter(proxy.Id, proxy2.Id, writer2)
+	qq := clientQueueHub.GetById(proxy.Id)
 	qq.SetSort(sorted)
 	go qq.Send()
 	defer qq.Close()
+
+	clientBackHub.addBufQueue(proxy.Id, proxy.Id)
+	clientBackHub.addBufQueue(proxy2.Id, proxy.Id)
+	clientBackHub.SetMap(proxy.Id, proxy.Id)  //?有用
+	clientBackHub.SetMap(proxy2.Id, proxy.Id) //?有用
+	oo := clientBackHub.GetById(proxy.Id)
+	oo.SetConn(conn)
+	oo.SetSort(sorted)
+	go func() {
+		err := oo.Send(clientBackHub)
+		done <- Done{true, err}
+	}()
 
 	go func() {
 		_, err := copyBuffer(qq, conn) //io.Copy(qq, conn) //client.copyBuffer(qq, conn)

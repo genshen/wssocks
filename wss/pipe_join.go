@@ -1,7 +1,7 @@
 package wss
 
 import (
-	"fmt"
+	"io"
 	"net"
 	"sync"
 
@@ -20,27 +20,25 @@ func (q *queue2) SetConn(conn net.Conn) {
 	q.conn = conn
 }
 
-func (q *queue2) Send() {
+func (q *queue2) Send(hub *queueHub2) error {
 	for {
 		if q.status == "close" {
-			return
+			return io.EOF
 		}
 		for _, id := range q.sorted {
-			q := outQueueHub.GetById(id)
+			q := hub.GetById(id)
 			if q == nil {
-				fmt.Println(id, "queue not found")
+				pipePrintln(id, "join queue not found")
 				continue
 			}
-			//fmt.Println("read ... from chan")
 			data := <-q.buffer
-			mq := outQueueHub.GetById(q.master)
-			fmt.Println("to_one send:", mq.conn, string(data), id)
-			//fmt.Println("read ok")
+			mq := hub.GetById(q.master)
+			pipePrintln("join from:", id, "send:", string(data))
 			_, e := mq.conn.Write(data)
 			if e != nil {
-				fmt.Println("writer.Write", e.Error())
+				pipePrintln("writer.Write", e.Error())
+				return e
 			}
-			fmt.Println("to_one ok", id)
 		}
 	}
 }
@@ -135,10 +133,10 @@ func (h *queueHub2) TrySend(id ksuid.KSUID, conn net.Conn) bool {
 	if c, ok := h.counter[id]; ok {
 		if q, ok := h.queue[id]; ok {
 			if c == int64(len(q.sorted)) {
-				fmt.Println("toOne try", c, q.sorted, q.conn)
+				pipePrintln("join try", q.sorted, q.conn)
 				if q.conn != nil {
 					h.status[id] = true
-					go q.Send()
+					go q.Send(h)
 					return true
 				}
 			}

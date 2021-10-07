@@ -220,6 +220,7 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 		}
 	}()
 
+	// 接收服务器下发消息
 	if hdl.wsc2 != nil {
 		hdl.wg.Add(1)
 		go func() {

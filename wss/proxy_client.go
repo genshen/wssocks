@@ -15,6 +15,7 @@ const (
 	TagEstOk
 	TagEstErr
 	TagNoMore
+	TagHandshake
 )
 
 // proxy client handle one connection, send data to proxy server vai websocket.

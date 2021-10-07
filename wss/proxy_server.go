@@ -67,9 +67,9 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 		fmt.Println(err)
 		return err
 	}
-	if socketStream.Type != WsTpBeats {
-		fmt.Println("dispatch", id, socketStream.Type)
-	}
+	//if socketStream.Type != WsTpBeats {
+	//	fmt.Println("dispatch", id, socketStream.Type)
+	//}
 
 	switch socketStream.Type {
 	case WsTpBeats: // heart beats
@@ -93,7 +93,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 		outQueueHub.Incre(masterKSUID)
 		outQueueHub.TrySend(masterKSUID, nil)
 		outQueueHub.SetMap(id, masterKSUID)
-		fmt.Println("get client say", id)
+		//fmt.Println("get client say", id)
 	case WsTpEst: // establish 收到连接请求
 		var proxyEstMsg ProxyEstMessage
 		if err := json.Unmarshal(socketData, &proxyEstMsg); err != nil {
@@ -129,7 +129,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 			log.Error("base64 decode error,", err)
 			return err
 		} else {
-			fmt.Println("bytes", id, len(decodeBytes), string(decodeBytes))
+			//fmt.Println("bytes", id, len(decodeBytes), string(decodeBytes))
 			// 传输数据
 			outQueueHub.GetById(id).setData(decodeBytes)
 			return nil
@@ -196,11 +196,11 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 	defer cancel()
 	switch proxyType {
 	case ProxyTypeSocks5:
-		if err := hub.WriteProxyMessage(ctx, id, TagData, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
+		if err := hub.WriteProxyMessage(ctx, id, TagHandshake, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}); err != nil {
 			return err
 		}
 	case ProxyTypeHttps:
-		if err := hub.WriteProxyMessage(ctx, id, TagData, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: wssocks\r\n\r\n")); err != nil {
+		if err := hub.WriteProxyMessage(ctx, id, TagHandshake, []byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: wssocks\r\n\r\n")); err != nil {
 			return err
 		}
 	}
@@ -234,7 +234,7 @@ func copyBuffer(iow io.Writer, conn *net.TCPConn) (written int64, err error) {
 		i++
 		nr, er := conn.Read(buf)
 		if nr > 0 {
-			fmt.Println("copy read", nr)
+			//fmt.Println("copy read", nr)
 			var nw int
 			var ew error
 			nw, ew = iow.Write(buf[0:nr])
