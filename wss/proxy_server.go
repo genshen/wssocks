@@ -222,37 +222,3 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 	// tellClosed is called outside this func.
 	return d.err
 }
-
-// copyBuffer 传输数据
-func copyBuffer(iow io.Writer, conn *net.TCPConn) (written int64, err error) {
-	//如果设置过大会耗内存高，4k比较合理
-	//size := 4 * 1024
-	size := 10 //临时测试
-	buf := make([]byte, size)
-	i := 0
-	for {
-		i++
-		nr, er := conn.Read(buf)
-		if nr > 0 {
-			//fmt.Println("copy read", nr)
-			var nw int
-			var ew error
-			nw, ew = iow.Write(buf[0:nr])
-			if nw > 0 {
-				written += int64(nw)
-			}
-			if ew != nil {
-				err = fmt.Errorf("#1 %s", ew.Error())
-				break
-			}
-			if nr != nw {
-				err = fmt.Errorf("#2 %s", io.ErrShortWrite.Error())
-				break
-			}
-		}
-		if er != nil {
-			break
-		}
-	}
-	return written, err
-}

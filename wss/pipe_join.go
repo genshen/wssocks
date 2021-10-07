@@ -87,7 +87,7 @@ func (h *queueHub2) addBufQueue(id ksuid.KSUID, masterId ksuid.KSUID) {
 	if _, ok := h.queue[id]; !ok {
 		h.queue[id] = &queue2{
 			master: masterId,
-			buffer: make(chan []byte, 1),
+			buffer: make(chan []byte, 10),
 		}
 	}
 }
