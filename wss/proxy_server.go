@@ -85,14 +85,11 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 		if err != nil {
 			return err
 		}
-		serverQueueHub.addWriter(masterKSUID, id, writer)
-		serverQueueHub.Incre(masterKSUID)
+		serverQueueHub.AddWriter(masterKSUID, id, writer)
 		serverQueueHub.TrySend(masterKSUID)
 
-		outQueueHub.addBufQueue(id, masterKSUID)
-		outQueueHub.Incre(masterKSUID)
+		outQueueHub.addLink(id, masterKSUID)
 		outQueueHub.TrySend(masterKSUID, nil)
-		outQueueHub.SetMap(id, masterKSUID)
 		//fmt.Println("get client say", id)
 	case WsTpEst: // establish 收到连接请求
 		var proxyEstMsg ProxyEstMessage
@@ -114,8 +111,8 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 				estData = decodedBytes
 			}
 		}
-		serverQueueHub.GetById(id).SetSort(proxyEstMsg.Sorted)
-		outQueueHub.GetById(id).SetSort(proxyEstMsg.Sorted)
+		serverQueueHub.SetSort(id, proxyEstMsg.Sorted)
+		outQueueHub.SetSort(id, proxyEstMsg.Sorted)
 		// 与外面建立连接，并把外面返回的数据放回websocket
 		go establishProxy(hub, ProxyRegister{id, proxyEstMsg.Type, proxyEstMsg.Addr, estData})
 	case WsTpData: //从websocket收到数据发送到外面

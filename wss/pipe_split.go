@@ -10,19 +10,33 @@ import (
 type writer = io.Writer
 
 type queue struct {
-	masterID ksuid.KSUID            // 主连接
-	buffer   chan []byte            //
-	writers  map[ksuid.KSUID]writer //每一个连接
-	sorted   []ksuid.KSUID          //连接请求的顺序
-	counter  int64                  //计数器
-	status   string
+	masterID ksuid.KSUID            // 主连接ID
+	buffer   chan []byte            // 写入缓冲区
+	writers  map[ksuid.KSUID]writer // 每一个连接
+	sorted   []ksuid.KSUID          // 连接发送的顺序
+	status   string                 // 管道状态
+	ctime    int64                  // 创建时间
 }
 
+func NewQueue(masterID ksuid.KSUID) *queue {
+	return &queue{
+		masterID: masterID,
+		buffer:   makeBuffer(),
+		writers:  make(map[ksuid.KSUID]writer),
+		status:   "wait",
+	}
+}
+
+func (q *queue) SetSort(sort []ksuid.KSUID) {
+	q.sorted = sort
+}
+
+// 写入缓冲区
 func (q *queue) Write(data []byte) (n int, err error) {
 	defer func() {
 		// 捕获异常
 		if err := recover(); err != nil {
-			pipePrintln("split recover", err)
+			pipePrintln("split.writer recover", err)
 			return
 		}
 	}()
@@ -34,9 +48,16 @@ func (q *queue) Write(data []byte) (n int, err error) {
 	return len(data), nil
 }
 
+// 从缓冲区读取并发送到各个连接
 func (q *queue) Send() error {
+	// 如果已经在发送，返回
+	if q.status == "send" {
+		return nil
+	}
+	// 设置为开始发送
 	q.status = "send"
 	for {
+		// 如果状态已经关闭，则返回
 		if q.status == "close" {
 			return io.EOF
 		}
@@ -46,84 +67,88 @@ func (q *queue) Send() error {
 			if err != nil {
 				return err
 			}
-			pipePrintln("split send to:", id, "data:", string(data))
+			pipePrintln("split.send to:", id, "data:", string(data))
 			_, e := w.Write(data)
 			if e != nil {
-				pipePrintln("writer.Write", e.Error())
+				pipePrintln("split.send write", e.Error())
 				return e
 			}
 		}
 	}
 }
 
-func (q *queue) SetSort(sort []ksuid.KSUID) {
-	q.sorted = sort
-}
+// 关闭通道
 func (q *queue) Close() {
 	q.status = "close"
 	close(q.buffer)
 }
 
-type queueHub struct {
-	queue   map[ksuid.KSUID]*queue
-	counter map[ksuid.KSUID]int64
-	mu      *sync.RWMutex
+type QueueHub struct {
+	queue map[ksuid.KSUID]*queue
+	mu    *sync.RWMutex
 }
 
-func NewQueueHub() *queueHub {
-	qh := &queueHub{
+func NewQueueHub() *QueueHub {
+	qh := &QueueHub{
 		queue: make(map[ksuid.KSUID]*queue),
 		mu:    &sync.RWMutex{},
 	}
 	return qh
 }
 
-// 不保证顺序
-func (h *queueHub) addWriter(masterID ksuid.KSUID, curID ksuid.KSUID, w io.Writer) {
+// 把连接都加进来，不用保证顺序
+func (h *QueueHub) AddWriter(masterID ksuid.KSUID, id ksuid.KSUID, w io.Writer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	// 不存在，就先创建
 	if _, ok := h.queue[masterID]; !ok {
-		h.queue[masterID] = &queue{
-			masterID: masterID,
-			buffer:   make(chan []byte, 10),
-			writers:  make(map[ksuid.KSUID]writer),
-			counter:  1,
-			status:   "wait",
-		}
+		h.queue[masterID] = NewQueue(masterID)
 	}
 
-	h.queue[masterID].writers[curID] = w
+	h.queue[masterID].writers[id] = w
 }
 
-func (h *queueHub) GetById(id ksuid.KSUID) *queue {
+// 删除写
+func (h *QueueHub) DelWriter(masterID ksuid.KSUID) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// 存在，就删除
+	if q, ok := h.queue[masterID]; ok {
+		q.Close()
+		delete(h.queue, masterID)
+	}
+}
+
+// 获取数据
+func (h *QueueHub) GetById(masterID ksuid.KSUID) *queue {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	if q, ok := h.queue[id]; ok {
+	if q, ok := h.queue[masterID]; ok {
 		return q
 	}
 	return nil
 }
 
-func (h *queueHub) Incre(id ksuid.KSUID) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if q, ok := h.queue[id]; ok {
-		q.counter++
-	} else {
-		q.counter = 1
+// 设置全部连接
+func (q *QueueHub) SetSort(masterID ksuid.KSUID, sort []ksuid.KSUID) {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	if q, ok := q.queue[masterID]; ok {
+		q.SetSort(sort)
 	}
 }
 
-// 服务端根据状态决定发送
-func (h *queueHub) TrySend(id ksuid.KSUID) bool {
+// 根据状态决定是否可开启发送
+func (h *QueueHub) TrySend(masterID ksuid.KSUID) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	if q, ok := h.queue[id]; ok {
+	if q, ok := h.queue[masterID]; ok {
 		if q.status == "send" {
 			return true
 		}
-		if q.counter == int64(len(q.sorted)) {
+		if len(q.writers) == len(q.sorted) {
 			pipePrintln("split try", q.sorted)
 			go q.Send()
 			return true

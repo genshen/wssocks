@@ -201,17 +201,15 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	writer2 := NewWebSocketWriterWithMutex(&wsc2.ConcurrentWebSocket, proxy2.Id, ctx2)
 
-	clientQueueHub.addWriter(proxy.Id, proxy.Id, writer)
-	clientQueueHub.addWriter(proxy.Id, proxy2.Id, writer2)
+	clientQueueHub.AddWriter(proxy.Id, proxy.Id, writer)
+	clientQueueHub.AddWriter(proxy.Id, proxy2.Id, writer2)
 	qq := clientQueueHub.GetById(proxy.Id)
 	qq.SetSort(sorted)
 	go qq.Send()
 	defer qq.Close()
 
-	clientBackHub.addBufQueue(proxy.Id, proxy.Id)
-	clientBackHub.addBufQueue(proxy2.Id, proxy.Id)
-	clientBackHub.SetMap(proxy.Id, proxy.Id)  //?有用
-	clientBackHub.SetMap(proxy2.Id, proxy.Id) //?有用
+	clientBackHub.addLink(proxy.Id, proxy.Id)
+	clientBackHub.addLink(proxy2.Id, proxy.Id)
 	oo := clientBackHub.GetById(proxy.Id)
 	oo.SetConn(conn)
 	oo.SetSort(sorted)

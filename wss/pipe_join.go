@@ -8,19 +8,40 @@ import (
 	"github.com/segmentio/ksuid"
 )
 
-type queue2 struct {
-	buffer chan []byte
-	master ksuid.KSUID
-	sorted []ksuid.KSUID
-	conn   net.Conn
-	status string
+type link struct {
+	buffer  chan []byte
+	master  ksuid.KSUID
+	sorted  []ksuid.KSUID
+	conn    net.Conn
+	status  string
+	counter int
+	ctime   int64 // 创建时间
 }
 
-func (q *queue2) SetConn(conn net.Conn) {
+func NewLink(masterID ksuid.KSUID) *link {
+	return &link{
+		master:  masterID,
+		buffer:  makeBuffer(),
+		counter: 1,
+		status:  "wait",
+	}
+}
+
+func (q *link) SetConn(conn net.Conn) {
 	q.conn = conn
 }
 
-func (q *queue2) Send(hub *queueHub2) error {
+func (q *link) SetSort(sort []ksuid.KSUID) {
+	q.sorted = sort
+}
+
+func (q *link) Send(hub *LinkHub) error {
+	// 如果已经在发送，返回
+	if q.status == "send" {
+		return nil
+	}
+	// 设置为开始发送
+	q.status = "send"
 	for {
 		if q.status == "close" {
 			return io.EOF
@@ -43,17 +64,13 @@ func (q *queue2) Send(hub *queueHub2) error {
 	}
 }
 
-func (q *queue2) SetSort(sort []ksuid.KSUID) {
-	q.sorted = sort
-}
-
-func (q *queue2) setData(data []byte) {
+func (q *link) setData(data []byte) {
 	b := make([]byte, len(data))
 	copy(b, data)
 	q.buffer <- b
 }
 
-func (q *queue2) Close() {
+func (q *link) Close() {
 	q.status = "close"
 	for _, id := range q.sorted {
 		q := outQueueHub.GetById(id)
@@ -61,85 +78,72 @@ func (q *queue2) Close() {
 	}
 }
 
-type queueHub2 struct {
-	queue   map[ksuid.KSUID]*queue2
-	id2mas  map[ksuid.KSUID]ksuid.KSUID
-	counter map[ksuid.KSUID]int64
-	status  map[ksuid.KSUID]bool
-	mu      *sync.RWMutex
+type LinkHub struct {
+	links map[ksuid.KSUID]*link
+	mu    *sync.RWMutex
 }
 
-func NewQueueHub2() *queueHub2 {
-	qh := &queueHub2{
-		queue:   make(map[ksuid.KSUID]*queue2),
-		id2mas:  make(map[ksuid.KSUID]ksuid.KSUID),
-		counter: make(map[ksuid.KSUID]int64),
-		status:  make(map[ksuid.KSUID]bool),
-		mu:      &sync.RWMutex{},
+func NewLinkHub() *LinkHub {
+	qh := &LinkHub{
+		links: make(map[ksuid.KSUID]*link),
+		mu:    &sync.RWMutex{},
 	}
 	return qh
 }
 
-func (h *queueHub2) addBufQueue(id ksuid.KSUID, masterId ksuid.KSUID) {
+func (h *LinkHub) addLink(id ksuid.KSUID, masterID ksuid.KSUID) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if _, ok := h.queue[id]; !ok {
-		h.queue[id] = &queue2{
-			master: masterId,
-			buffer: make(chan []byte, 10),
-		}
+	// 所有连接
+	if _, ok := h.links[id]; !ok {
+		h.links[id] = NewLink(masterID)
+	}
+	// 防止计数器多算
+	if id == masterID {
+		return
+	}
+	// 主连接做计数器加加
+	m, ok := h.links[masterID]
+	if !ok {
+		h.links[masterID] = NewLink(masterID)
+	} else {
+		m.counter++
 	}
 }
 
-func (h *queueHub2) GetById(id ksuid.KSUID) *queue2 {
+// 取数据
+func (h *LinkHub) GetById(id ksuid.KSUID) *link {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	if q, ok := h.queue[id]; ok {
+	if q, ok := h.links[id]; ok {
 		return q
 	}
 	return nil
 }
 
-// 设置与主id的关系，用于查找主id中的conn和sorted
-func (h *queueHub2) SetMap(id ksuid.KSUID, master ksuid.KSUID) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.id2mas[id] = master
-}
-
-func (h *queueHub2) Incre(id ksuid.KSUID) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if _, ok := h.counter[id]; ok {
-		h.counter[id]++
-	} else {
-		h.counter[id] = 1
+// 设置连接传输顺序
+func (h *LinkHub) SetSort(masterID ksuid.KSUID, sort []ksuid.KSUID) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if q, ok := h.links[masterID]; ok {
+		q.SetSort(sort)
 	}
 }
 
 // 服务端根据状态决定发送
-func (h *queueHub2) TrySend(id ksuid.KSUID, conn net.Conn) bool {
+func (h *LinkHub) TrySend(masterID ksuid.KSUID, conn net.Conn) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	if s, ok := h.status[id]; ok {
-		return s
-	}
 
-	if conn != nil {
-		h.queue[id].SetConn(conn)
-	}
-
-	if c, ok := h.counter[id]; ok {
-		if q, ok := h.queue[id]; ok {
-			if c == int64(len(q.sorted)) {
-				pipePrintln("join try", q.sorted, q.conn)
-				if q.conn != nil {
-					h.status[id] = true
-					go q.Send(h)
-					return true
-				}
-			}
+	if q, ok := h.links[masterID]; ok {
+		if conn != nil {
+			q.SetConn(conn)
+		}
+		if q.conn != nil && q.counter == len(q.sorted) {
+			pipePrintln("join try", q.sorted, q.conn)
+			go q.Send(h)
+			return true
 		}
 	}
 	return false

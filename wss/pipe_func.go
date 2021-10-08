@@ -59,6 +59,14 @@ func readWithTimeout(buffer chan []byte) ([]byte, error) {
 	}
 }
 
+// 创建缓冲区
+func makeBuffer() chan []byte {
+	if pipeDebug {
+		return make(chan []byte, 1)
+	}
+	return make(chan []byte, 10)
+}
+
 // 打印日志
 func pipePrintln(a ...interface{}) (n int, err error) {
 	if !pipeDebug {
