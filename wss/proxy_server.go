@@ -10,18 +10,19 @@ import (
 	"net"
 	"time"
 
+	"github.com/genshen/wssocks/pipe"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 	"nhooyr.io/websocket"
 )
 
-var serverQueueHub *queueHub
+var serverQueueHub *pipe.QueueHub
 
-var outQueueHub *queueHub2
+var outQueueHub *pipe.LinkHub
 
 func init() {
-	serverQueueHub = NewQueueHub()
-	outQueueHub = NewQueueHub2()
+	serverQueueHub = pipe.NewQueueHub()
+	outQueueHub = pipe.NewLinkHub()
 }
 
 type Connector struct {
@@ -88,7 +89,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 		serverQueueHub.AddWriter(masterKSUID, id, writer)
 		serverQueueHub.TrySend(masterKSUID)
 
-		outQueueHub.addLink(id, masterKSUID)
+		outQueueHub.AddLink(id, masterKSUID)
 		outQueueHub.TrySend(masterKSUID, nil)
 		//fmt.Println("get client say", id)
 	case WsTpEst: // establish 收到连接请求
@@ -128,10 +129,9 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 		} else {
 			//fmt.Println("bytes", id, len(decodeBytes), string(decodeBytes))
 			// 传输数据
-			outQueueHub.GetById(id).setData(decodeBytes)
+			outQueueHub.Write(id, decodeBytes)
 			return nil
 		}
-
 	}
 	return nil
 }
@@ -206,7 +206,7 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, add
 	writer := serverQueueHub.GetById(id)
 	go func() {
 		// 往回传
-		_, err := copyBuffer(writer, conn.(*net.TCPConn))
+		_, err := pipe.CopyBuffer(writer, conn.(*net.TCPConn))
 		if err != nil {
 			log.Error("copy error,", err)
 			e.done <- ChanDone{true, err}

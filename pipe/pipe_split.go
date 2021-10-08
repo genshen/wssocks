@@ -1,8 +1,11 @@
-package wss
+package pipe
+
+// 将收到的数据先放到buffer，再异步写入多个向外的连接(writer)
 
 import (
 	"io"
 	"sync"
+	"time"
 
 	"github.com/segmentio/ksuid"
 )
@@ -15,7 +18,7 @@ type queue struct {
 	writers  map[ksuid.KSUID]writer // 每一个连接
 	sorted   []ksuid.KSUID          // 连接发送的顺序
 	status   string                 // 管道状态
-	ctime    int64                  // 创建时间
+	ctime    time.Time              // 创建时间
 }
 
 func NewQueue(masterID ksuid.KSUID) *queue {
@@ -23,10 +26,12 @@ func NewQueue(masterID ksuid.KSUID) *queue {
 		masterID: masterID,
 		buffer:   makeBuffer(),
 		writers:  make(map[ksuid.KSUID]writer),
-		status:   "wait",
+		status:   StaWait,
+		ctime:    time.Now(),
 	}
 }
 
+// 设置顺序
 func (q *queue) SetSort(sort []ksuid.KSUID) {
 	q.sorted = sort
 }
@@ -51,14 +56,14 @@ func (q *queue) Write(data []byte) (n int, err error) {
 // 从缓冲区读取并发送到各个连接
 func (q *queue) Send() error {
 	// 如果已经在发送，返回
-	if q.status == "send" {
+	if q.status == StaSend {
 		return nil
 	}
 	// 设置为开始发送
-	q.status = "send"
+	q.status = StaSend
 	for {
 		// 如果状态已经关闭，则返回
-		if q.status == "close" {
+		if q.status == StaClose {
 			return io.EOF
 		}
 		for _, id := range q.sorted {
@@ -79,7 +84,10 @@ func (q *queue) Send() error {
 
 // 关闭通道
 func (q *queue) Close() {
-	q.status = "close"
+	if q.status == StaClose {
+		return
+	}
+	q.status = StaClose
 	close(q.buffer)
 }
 
@@ -145,9 +153,6 @@ func (h *QueueHub) TrySend(masterID ksuid.KSUID) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if q, ok := h.queue[masterID]; ok {
-		if q.status == "send" {
-			return true
-		}
 		if len(q.writers) == len(q.sorted) {
 			pipePrintln("split try", q.sorted)
 			go q.Send()
@@ -155,4 +160,25 @@ func (h *QueueHub) TrySend(masterID ksuid.KSUID) bool {
 		}
 	}
 	return false
+}
+
+// 删除过期数据
+func (h *QueueHub) TimeoutClose() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var tmp []ksuid.KSUID
+	for id, queue := range h.queue {
+		if time.Since(queue.ctime) > timeout {
+			pipePrintln("split.hub timeout", id, queue.ctime.String())
+			tmp = append(tmp, id)
+			if len(tmp) > 100 { //单次最大处理条数
+				break
+			}
+		}
+	}
+	for _, id := range tmp {
+		h.queue[id].Close()
+		delete(h.queue, id)
+	}
 }

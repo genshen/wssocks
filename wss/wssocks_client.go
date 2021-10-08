@@ -7,18 +7,19 @@ import (
 	"net"
 	"sync"
 
+	"github.com/genshen/wssocks/pipe"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 )
 
 var StoppedError = errors.New("listener stopped")
 
-var clientQueueHub *queueHub
-var clientBackHub *queueHub2
+var clientQueueHub *pipe.QueueHub
+var clientBackHub *pipe.LinkHub
 
 func init() {
-	clientQueueHub = NewQueueHub()
-	clientBackHub = NewQueueHub2()
+	clientQueueHub = pipe.NewQueueHub()
+	clientBackHub = pipe.NewLinkHub()
 }
 
 // client part of wssocks
@@ -144,10 +145,10 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata
 		if data.Tag == TagHandshake {
 			if _, err := conn.Write(data.Data); err != nil {
-				clientBackHub.GetById(id).Close()
+				clientBackHub.DelLink(id)
 			}
 		} else {
-			clientBackHub.GetById(id).setData(data.Data)
+			clientBackHub.Write(id, data.Data)
 		}
 	}, func(id ksuid.KSUID, tell bool) { //onclosed
 		done <- Done{tell, nil}
@@ -161,10 +162,10 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	proxy2 := wsc2.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata
 		if data.Tag == TagHandshake {
 			if _, err := conn.Write(data.Data); err != nil {
-				clientBackHub.GetById(id).Close()
+				clientBackHub.DelLink(id)
 			}
 		} else {
-			clientBackHub.GetById(id).setData(data.Data)
+			clientBackHub.Write(id, data.Data)
 		}
 	}, func(id ksuid.KSUID, tell bool) { //onclosed
 		done <- Done{tell, nil}
@@ -208,8 +209,8 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	go qq.Send()
 	defer qq.Close()
 
-	clientBackHub.addLink(proxy.Id, proxy.Id)
-	clientBackHub.addLink(proxy2.Id, proxy.Id)
+	clientBackHub.AddLink(proxy.Id, proxy.Id)
+	clientBackHub.AddLink(proxy2.Id, proxy.Id)
 	oo := clientBackHub.GetById(proxy.Id)
 	oo.SetConn(conn)
 	oo.SetSort(sorted)
@@ -219,7 +220,7 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	}()
 
 	go func() {
-		_, err := copyBuffer(qq, conn) //io.Copy(qq, conn) //client.copyBuffer(qq, conn)
+		_, err := pipe.CopyBuffer(qq, conn) //io.Copy(qq, conn) //client.copyBuffer(qq, conn)
 		if err != nil {
 			log.Error("write error: ", err)
 		}

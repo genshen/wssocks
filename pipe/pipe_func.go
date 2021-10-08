@@ -1,4 +1,4 @@
-package wss
+package pipe
 
 import (
 	"errors"
@@ -11,8 +11,18 @@ import (
 // 是否打开调试日志
 var pipeDebug bool = false
 
-// copyBuffer 传输数据
-func copyBuffer(iow io.Writer, conn *net.TCPConn) (written int64, err error) {
+// 数据过期时间
+var timeout time.Duration = time.Duration(1) * time.Hour
+
+// 状态值
+const (
+	StaWait  = "wait"
+	StaSend  = "send"
+	StaClose = "close"
+)
+
+// CopyBuffer 传输数据
+func CopyBuffer(iow io.Writer, conn *net.TCPConn) (written int64, err error) {
 	//如果设置过大会耗内存高，4k比较合理
 	size := 4 * 1024
 	if pipeDebug {
