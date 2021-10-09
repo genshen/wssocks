@@ -93,6 +93,7 @@ func (q *queue) Send() error {
 				return err
 			}
 			if b.eof {
+				//fmt.Println("queue send eof")
 				w.WriteEOF()
 				return nil
 			}

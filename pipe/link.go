@@ -87,6 +87,7 @@ func (q *link) Send(hub *LinkHub) error {
 					return err
 				}
 				if b.eof {
+					//fmt.Println("link send eof")
 					// 发送关闭写请求
 					conn.CloseWrite()
 					return nil

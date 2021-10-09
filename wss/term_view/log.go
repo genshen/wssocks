@@ -2,11 +2,12 @@ package term_view
 
 import (
 	"fmt"
+	"os"
+	"text/tabwriter"
+
 	"github.com/genshen/wssocks/wss"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
-	"os"
-	"text/tabwriter"
 )
 
 type ProgressLog struct {
@@ -26,6 +27,7 @@ func NewPLog(cr *wss.ConnRecord) *ProgressLog {
 // the connection table is write into p.Write
 // (p.Write is a bytes buffer, only really output to screen when calling Flush).
 func (p *ProgressLog) SetLogBuffer(r *wss.ConnRecord) {
+	//return
 	_, terminalRows, err := terminal.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		logrus.Error(err)
@@ -67,8 +69,8 @@ func (p *ProgressLog) SetLogBuffer(r *wss.ConnRecord) {
 func (p *ProgressLog) Write(buf []byte) (int, error) {
 	p.record.Mutex.Lock()
 	defer p.record.Mutex.Unlock()
-	p.SetLogBuffer(p.record) // call Writer.Write() to set log data into buffer
-	err := p.Writer.Flush(func() error {                      // flush buffer
+	p.SetLogBuffer(p.record)             // call Writer.Write() to set log data into buffer
+	err := p.Writer.Flush(func() error { // flush buffer
 		if _, err := p.Writer.OutDev.Write(buf); err != nil { // just write buff to stdout, and keep progress log.
 			return err
 		}

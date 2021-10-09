@@ -115,6 +115,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 		}
 
 		if requestMsg.Tag == TagEOF { //设置收到io.EOF结束符
+			//fmt.Println("server receive eof")
 			serverLinkHub.Get(id).WriteEOF()
 			return nil
 		}
@@ -195,9 +196,9 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, addr string, data 
 	}()
 	defer serverQueueHub.Remove(id)
 
-	fmt.Println("wait")
+	//fmt.Println("wait")
 	writer.Wait()
-	fmt.Println("done")
+	//fmt.Println("done")
 	// s.RemoveProxy(proxy.Id)
 	// tellClosed is called outside this func.
 	return nil

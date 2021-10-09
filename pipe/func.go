@@ -62,7 +62,7 @@ func CopyBuffer(iow PipeWriter, conn *net.TCPConn) (written int64, err error) {
 			}
 		}
 		if er == io.EOF {
-			fmt.Println(time.Now(), "copy get and write eof")
+			//fmt.Println(time.Now(), "copy get and write eof")
 			iow.WriteEOF()
 			break
 		} else if er != nil {

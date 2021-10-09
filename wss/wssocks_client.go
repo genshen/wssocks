@@ -146,6 +146,9 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata 接收数据回调
 		if data.Tag == TagData {
 			clientLinkHub.Write(id, data.Data)
+		} else if data.Tag == TagEOF {
+			//fmt.Println("client receive eof")
+			clientLinkHub.Get(id).WriteEOF()
 		}
 	}, func(id ksuid.KSUID, tell bool) { //onclosed
 	}, func(id ksuid.KSUID, err error) { //onerror
@@ -155,6 +158,9 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	proxy2 := wsc2.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata 接收数据回调
 		if data.Tag == TagData {
 			clientLinkHub.Write(id, data.Data)
+		} else if data.Tag == TagEOF {
+			//fmt.Println("client receive eof")
+			clientLinkHub.Get(id).WriteEOF()
 		}
 	}, func(id ksuid.KSUID, tell bool) { //onclosed
 	}, func(id ksuid.KSUID, err error) { //onerror
@@ -164,6 +170,11 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 		wsc2.RemoveProxy(proxy2.Id)
 	}()
 
+	// 让各自连接准备，对方收到后与总连接数对比决定是否开始向外转发
+	// 最好放在Establish前发送，这样Establish数据得到进行setSort时map一定存在
+	proxy.SayID(wsc, proxy.Id)
+	proxy2.SayID(wsc2, proxy.Id) //都发送主id
+
 	// 给主链接发送顺序
 	sorted := []ksuid.KSUID{proxy.Id, proxy2.Id}
 
@@ -172,10 +183,6 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 		return err
 	}
 	// 第二条线路不需要Establish因为不用和目标机器连接
-
-	// 让各自连接准备，对方收到后与总连接数对比决定是否开始向外转发
-	proxy.SayID(wsc, proxy.Id)
-	proxy2.SayID(wsc2, proxy.Id) //都发送主id
 
 	// trans incoming data from proxy client application.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -215,9 +222,9 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	oo.SetSort(sorted)
 	go oo.Send(clientLinkHub)
 
-	fmt.Println("wait")
+	//fmt.Println("wait")
 	oo.Wait()
-	fmt.Println("done")
+	//fmt.Println("done")
 	return nil
 }
 
