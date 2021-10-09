@@ -42,8 +42,6 @@ func init() {
 	fs := flag.NewFlagSet(CommandNameClient, flag.ContinueOnError)
 	clientCommand.FlagSet = fs
 	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5 proxy.`)
-	clientCommand.FlagSet.BoolVar(&client.http, "http", false, `enable http and https proxy.`)
-	clientCommand.FlagSet.StringVar(&client.httpAddr, "http-addr", ":1086", `listen address of http proxy (if enabled).`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
 	clientCommand.FlagSet.StringVar(&client.key, "key", "", `connection key.`)
 	clientCommand.FlagSet.Var(&client.headers, "ws-header", `list of user defined http headers in websocket request. 
@@ -58,8 +56,6 @@ func init() {
 
 type client struct {
 	address       string      // local listening address
-	http          bool        // enable http and https proxy
-	httpAddr      string      // listen address of http and https(if it is enabled)
 	remote        string      // string usr of server
 	remoteUrl     *url.URL    // url of server
 	headers       listFlags   // websocket headers passed from user.
@@ -77,12 +73,6 @@ func (c *client) PreRun() error {
 		return err
 	} else {
 		c.remoteUrl = u
-	}
-
-	if c.http {
-		log.Info("http(s) proxy is enabled.")
-	} else {
-		log.Info("http(s) proxy is disabled.")
 	}
 
 	// check header format.
@@ -107,8 +97,6 @@ func (c *client) Run() error {
 
 	options := cl.Options{
 		LocalSocks5Addr: c.address,
-		HttpEnabled:     c.http,
-		LocalHttpAddr:   c.httpAddr,
 		RemoteUrl:       c.remoteUrl,
 		RemoteHeaders:   c.remoteHeaders,
 		ConnectionKey:   c.key,

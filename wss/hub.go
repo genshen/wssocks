@@ -2,9 +2,10 @@ package wss
 
 import (
 	"context"
+	"sync"
+
 	"github.com/segmentio/ksuid"
 	"nhooyr.io/websocket/wsjson"
-	"sync"
 )
 
 type ProxyServer struct {
@@ -24,7 +25,6 @@ type Hub struct {
 
 type ProxyRegister struct {
 	id       ksuid.KSUID
-	_type    int
 	addr     string
 	withData []byte
 }

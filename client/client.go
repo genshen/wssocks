@@ -43,8 +43,6 @@ func NewHttpClient() (*http.Client, *http.Transport) {
 
 type Options struct {
 	LocalSocks5Addr string      // local listening address
-	HttpEnabled     bool        // enable http and https proxy
-	LocalHttpAddr   string      // listen address of http and https(if it is enabled)
 	RemoteUrl       *url.URL    // url of server
 	RemoteHeaders   http.Header // parsed websocket headers (not presented in flag).
 	ConnectionKey   string      // connection key for authentication
@@ -278,36 +276,14 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 		}
 	}
 
-	// http listening
-	if c.HttpEnabled {
-		hdl.wg.Add(1)
-		log.WithField("http listen address", c.LocalHttpAddr).
-			Info("listening on local address for incoming proxy requests.")
-		go func() {
-			defer hdl.wg.Done()
-			defer once.Do(closeAll)
-			handle := wss.NewHttpProxy(hdl.wsc, record)
-			hdl.httpServer = &http.Server{Addr: c.LocalHttpAddr, Handler: &handle}
-			if err := hdl.httpServer.ListenAndServe(); err != nil {
-				log.Errorln(err)
-			}
-		}()
-	}
-
 	// start listen for socks5 and https connection.
 	hdl.cl = wss.NewClient()
 	go func() {
 		defer hdl.wg.Done()
 		defer once.Do(closeAll)
-		if err := hdl.cl.ListenAndServe(record, hdl.wsc, hdl.wsc2, c.LocalSocks5Addr, c.HttpEnabled, func() {
-			if c.HttpEnabled {
-				log.WithField("socks5 listen address", c.LocalSocks5Addr).
-					WithField("https listen address", c.LocalSocks5Addr).
-					Info("listening on local address for incoming proxy requests.")
-			} else {
-				log.WithField("socks5 listen address", c.LocalSocks5Addr).
-					Info("listening on local address for incoming proxy requests.")
-			}
+		if err := hdl.cl.ListenAndServe(record, hdl.wsc, hdl.wsc2, c.LocalSocks5Addr, func() {
+			log.WithField("socks5 listen address", c.LocalSocks5Addr).
+				Info("listening on local address for incoming proxy requests.")
 		}); err != nil {
 			log.Errorln(err)
 		}

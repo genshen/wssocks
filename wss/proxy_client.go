@@ -15,7 +15,8 @@ const (
 	TagEstOk
 	TagEstErr
 	TagNoMore
-	TagHandshake
+	TagHandshake //握手消息
+	TagEOF       //io.EOF连接关闭消息
 )
 
 // proxy client handle one connection, send data to proxy server vai websocket.
@@ -39,7 +40,7 @@ func (p *ProxyClient) SayID(wsc *WebSocketClient, id ksuid.KSUID) error {
 	if err := wsjson.Write(ctx, wsc.WsConn, &WebSocketMessage{
 		Type: WsTpHi,
 		Id:   p.Id.String(),
-		Data: id.String(),
+		Data: id,
 	}); err != nil {
 		log.Error("json error:", err)
 		return err
@@ -49,9 +50,8 @@ func (p *ProxyClient) SayID(wsc *WebSocketClient, id ksuid.KSUID) error {
 
 // tell wssocks proxy server to establish a proxy connection by sending server
 // proxy address, type, initial data.
-func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, proxyType int, addr string, sorted []ksuid.KSUID) error {
+func (p *ProxyClient) Establish(wsc *WebSocketClient, firstSendData []byte, addr string, sorted []ksuid.KSUID) error {
 	estMsg := ProxyEstMessage{
-		Type:     proxyType,
 		Addr:     addr,
 		Sorted:   sorted,
 		WithData: false,
