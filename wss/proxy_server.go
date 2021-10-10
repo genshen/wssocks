@@ -196,6 +196,8 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, addr string, data 
 	}()
 	defer serverQueueHub.Remove(id)
 
+	//fmt.Println(serverLinkHub.Len(), serverQueueHub.Len())
+	//time.Sleep(time.Minute)
 	//fmt.Println("wait")
 	writer.Wait()
 	//fmt.Println("done")

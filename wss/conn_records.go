@@ -1,18 +1,21 @@
 package wss
 
 import (
-	"github.com/sirupsen/logrus"
 	"io"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
 // struct record the connection size of each target host
 type ConnRecord struct {
-	ConnSize  uint            // total size of current connections
-	Addresses map[string]uint // current connections as well as its count
-	Writer    *io.Writer      // terminal writer  todo defer Flush
-	OnChange  func(status ConnStatus)
-	Mutex     *sync.Mutex
+	ConnSize    uint            // total size of current connections
+	Addresses   map[string]uint // current connections as well as its count
+	Writer      *io.Writer      // terminal writer  todo defer Flush
+	OnChange    func(status ConnStatus)
+	Mutex       *sync.Mutex
+	QueueHubLen int //检查发数据释放情况
+	LinkHubLen  int //检查收数据释放情况
 }
 
 // connection status when a connection is added or removed.
@@ -51,6 +54,9 @@ func (cr *ConnRecord) Update(status ConnStatus) {
 			logrus.Fatal("bad connection size")
 		}
 	}
+
+	cr.QueueHubLen = clientQueueHub.Len()
+	cr.LinkHubLen = clientLinkHub.Len()
 	// update log
 	if cr.OnChange != nil {
 		cr.OnChange(status)

@@ -64,11 +64,6 @@ func (q *queue) WriteEOF() {
 	q.buffer <- buffer{eof: true, data: []byte{}}
 }
 
-// 堵塞等待
-func (q *queue) Wait() {
-	<-q.done
-}
-
 // 从缓冲区读取并发送到各个连接
 func (q *queue) Send() error {
 	// 如果已经在发送，返回
@@ -105,6 +100,11 @@ func (q *queue) Send() error {
 			}
 		}
 	}
+}
+
+// 堵塞等待
+func (q *queue) Wait() {
+	<-q.done
 }
 
 // 关闭通道
@@ -218,4 +218,11 @@ func (h *QueueHub) TimeoutClose() {
 		h.queue[id].close()
 		delete(h.queue, id)
 	}
+}
+
+// 获取数据
+func (h *QueueHub) Len() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.queue)
 }

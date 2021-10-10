@@ -276,3 +276,10 @@ func (h *LinkHub) TimeoutClose() {
 		delete(h.links, id)
 	}
 }
+
+// 获取数据
+func (h *LinkHub) Len() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.links)
+}

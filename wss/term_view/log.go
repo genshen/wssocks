@@ -58,6 +58,11 @@ func (p *ProgressLog) SetLogBuffer(r *wss.ConnRecord) {
 		// log total connection size.
 		if recordsHiden == 0 {
 			_, _ = fmt.Fprintf(w, "TOTAL\t%d\t\n", r.ConnSize)
+
+			// 显示当前传输全局变量释放情况
+			if terminalRows > 2 {
+				_, _ = fmt.Fprintf(w, "QueueLen %d\tLinkLen %d\t\n", r.QueueHubLen, r.LinkHubLen)
+			}
 		} else {
 			_, _ = w.Write([]byte(fmt.Sprintf("TOTAL\t%d\t(%d record(s) hidden)\t\n",
 				r.ConnSize, recordsHiden)))

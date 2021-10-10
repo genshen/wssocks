@@ -127,7 +127,7 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, w
 				conn.Write([]byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: wssocks\r\n\r\n"))
 			}
 
-			// update connection record
+			// 更新输出区域的连接数据
 			record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
 			defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
 
@@ -222,6 +222,8 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	oo.SetSort(sorted)
 	go oo.Send(clientLinkHub)
 
+	//fmt.Println(clientLinkHub.Len(), clientQueueHub.Len())
+	//time.Sleep(time.Minute)
 	//fmt.Println("wait")
 	oo.Wait()
 	//fmt.Println("done")
