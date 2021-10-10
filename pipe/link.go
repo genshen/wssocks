@@ -63,14 +63,17 @@ func (q *link) Send(hub *LinkHub) error {
 			return io.ErrClosedPipe
 		}
 		for _, id := range q.sorted {
-			if q, ok := hub.links[id]; ok {
+			q := hub.Get(id)
+			if q != nil {
 				var conn *net.TCPConn
 				if id == q.master {
 					conn = q.conn
-				} else if mq, ok := hub.links[q.master]; ok {
-					conn = mq.conn
+				} else {
+					mq := hub.Get(q.master)
+					if mq != nil {
+						conn = mq.conn
+					}
 				}
-
 				b, err := readWithTimeout(q.buffer, expFiveMinute)
 				if err != nil {
 					return err
@@ -118,19 +121,18 @@ func (q *link) writeBuf(b buffer) (n int, err error) {
 		return 0, errors.New("send is over")
 	}
 
-	go func() {
-		defer func() {
-			// 捕获异常
-			if err := recover(); err != nil {
-				pipePrintln("queue.writer recover", err)
-				return
-			}
-		}()
-		select {
-		case <-time.After(expMinute):
-		case q.buffer <- b:
+	defer func() {
+		// 捕获异常
+		if err := recover(); err != nil {
+			pipePrintln("queue.writer recover", err)
+			return
 		}
 	}()
+	select {
+	case <-time.After(expFiveMinute):
+		return 0, errors.New("write timeout")
+	case q.buffer <- b:
+	}
 	return len(b.data), nil
 }
 

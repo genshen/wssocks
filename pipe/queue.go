@@ -50,24 +50,23 @@ func (q *queue) WriteEOF() {
 }
 
 // 基础方法
-func (q *queue) writeBuf(b buffer) (n int, err error) {
+func (q *queue) writeBuf(b buffer) (int, error) {
 	if q.status == StaDone {
 		return 0, errors.New("send is over")
 	}
 
-	go func() {
-		defer func() {
-			// 捕获异常
-			if err := recover(); err != nil {
-				pipePrintln("queue.writer recover", err)
-				return
-			}
-		}()
-		select {
-		case <-time.After(expMinute):
-		case q.buffer <- b:
+	defer func() {
+		// 捕获异常
+		if err := recover(); err != nil {
+			pipePrintln("queue.writer recover", err)
+			return
 		}
 	}()
+	select {
+	case <-time.After(expFiveMinute):
+		return 0, errors.New("write timeout")
+	case q.buffer <- b:
+	}
 	return len(b.data), nil
 }
 
