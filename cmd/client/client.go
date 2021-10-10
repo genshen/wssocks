@@ -106,7 +106,7 @@ func (c *client) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // fixme
 	defer cancel()
 
-	wsc, wsc2, err := hdl.CreateServerConn(&options, ctx)
+	wsc, err := hdl.CreateServerConn(&options, ctx)
 	if err != nil {
 		return err
 	}
@@ -114,8 +114,11 @@ func (c *client) Run() error {
 	log.WithFields(log.Fields{
 		"remote": c.remoteUrl.String(),
 	}).Info("connected to wssocks server.")
-	defer wsc.WSClose()
-	defer wsc2.WSClose()
+	defer func() {
+		for _, w := range wsc {
+			w.WSClose()
+		}
+	}()
 
 	if err := hdl.NegotiateVersion(ctx, c.remote); err != nil {
 		return err

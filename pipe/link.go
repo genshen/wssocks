@@ -93,18 +93,18 @@ func (q *link) Send(hub *LinkHub) error {
 					return nil
 				}
 				if conn != nil {
-					pipePrintln("join.send from:", id, "send:", string(b.data))
+					pipePrintln("link.send from:", id, "send:", string(b.data))
 					_, e := conn.Write(b.data)
 					if e != nil {
-						pipePrintln("join.send write", e.Error())
+						pipePrintln("link.send write", e.Error())
 						return e
 					}
 				} else {
-					pipePrintln(id, "join.send conn not found")
+					pipePrintln(id, "link.send conn not found")
 					return errors.New("conn not found")
 				}
 			} else {
-				pipePrintln(id, "join.send queue not found")
+				pipePrintln(id, "link.send queue not found")
 				return errors.New("queue not found")
 			}
 		}
@@ -116,7 +116,7 @@ func (q *link) Write(data []byte) (n int, err error) {
 	defer func() {
 		// 捕获异常
 		if err := recover(); err != nil {
-			pipePrintln("join.write recover", err)
+			pipePrintln("link.write recover", err)
 			return
 		}
 	}()
@@ -217,7 +217,7 @@ func (h *LinkHub) Write(id ksuid.KSUID, data []byte) (n int, err error) {
 	if q, ok := h.links[id]; ok {
 		return q.Write(data)
 	}
-	return 0, errors.New("join.hub link not found")
+	return 0, errors.New("link.hub link not found")
 }
 
 // 设置连接传输顺序
@@ -240,7 +240,7 @@ func (h *LinkHub) trySend(masterID ksuid.KSUID, conn *net.TCPConn) bool {
 		}
 		//fmt.Println("try", q.conn, q.counter, len(q.sorted))
 		if q.conn != nil && q.counter == len(q.sorted) {
-			pipePrintln("join.hub try", q.sorted, q.conn)
+			pipePrintln("link.hub try", q.sorted, q.conn)
 			go q.Send(h)
 			return true
 		}
@@ -264,7 +264,7 @@ func (h *LinkHub) TimeoutClose() {
 	var tmp []ksuid.KSUID
 	for id, link := range h.links {
 		if time.Since(link.ctime) > expHour {
-			pipePrintln("join.hub timeout", id, link.ctime.String())
+			pipePrintln("link.hub timeout", id, link.ctime.String())
 			tmp = append(tmp, id)
 			if len(tmp) > 100 { //单次最大处理条数
 				break

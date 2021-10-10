@@ -50,14 +50,11 @@ type Options struct {
 }
 
 type Handles struct {
-	wsc        *wss.WebSocketClient
-	wsc2       *wss.WebSocketClient
-	hb         *wss.HeartBeat
-	hb2        *wss.HeartBeat
-	httpServer *http.Server
-	cl         *wss.Client
-	closed     bool
-	wg         *sync.WaitGroup
+	wsc    []*wss.WebSocketClient
+	hb     *wss.HeartBeat
+	cl     *wss.Client
+	closed bool
+	wg     *sync.WaitGroup
 }
 
 func NewClientHandles() *Handles {
@@ -76,26 +73,15 @@ func (hdl *Handles) NotifyClose(once *sync.Once, wait bool) {
 		if hdl.cl != nil {
 			hdl.cl.Close(wait)
 		}
-		if hdl.httpServer != nil {
-			hdl.httpServer.Shutdown(context.TODO())
-		}
-		if hdl.hb != nil {
-			hdl.hb.Close()
-		}
-		if hdl.hb2 != nil {
-			hdl.hb2.Close()
-		}
-		if hdl.wsc != nil {
-			hdl.wsc.Close()
-		}
-		if hdl.wsc2 != nil {
-			hdl.wsc2.Close()
+		hdl.hb.Close()
+		for _, wsc := range hdl.wsc {
+			wsc.Close()
 		}
 	})
 }
 
 // create a server websocket connection based on user options.
-func (hdl *Handles) CreateServerConn(c *Options, ctx context.Context) (*wss.WebSocketClient, *wss.WebSocketClient, error) {
+func (hdl *Handles) CreateServerConn(c *Options, ctx context.Context) ([]*wss.WebSocketClient, error) {
 	if c.ConnectionKey != "" {
 		c.RemoteHeaders.Set("Key", c.ConnectionKey)
 	}
@@ -113,7 +99,7 @@ func (hdl *Handles) CreateServerConn(c *Options, ctx context.Context) (*wss.WebS
 	// load and use option plugin
 	if clientPlugin.HasOptionPlugin() {
 		if err := clientPlugin.OptionPlugin.OnOptionSet(*c); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -121,31 +107,36 @@ func (hdl *Handles) CreateServerConn(c *Options, ctx context.Context) (*wss.WebS
 	if clientPlugin.HasRequestPlugin() {
 		// in the plugin, we may add http header/dialer and modify remote address.
 		if err := clientPlugin.RequestPlugin.BeforeRequest(httpClient, transport, c.RemoteUrl, &c.RemoteHeaders); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
+	var wsc []*wss.WebSocketClient
 	// start websocket connection (to remote server).
-	wsc, err := wss.NewWebSocketClient(ctx, c.RemoteUrl.String(), httpClient, c.RemoteHeaders)
-	if err != nil {
-		return nil, nil, fmt.Errorf("establishing connection error: %w", err)
+	for i := 0; i < 4; i++ {
+		w, err := wss.NewWebSocketClient(ctx, c.RemoteUrl.String(), httpClient, c.RemoteHeaders)
+		if err != nil {
+			return nil, fmt.Errorf("establishing connection error: %w", err)
+		}
+		wsc = append(wsc, w)
 	}
-	wsc2, err := wss.NewWebSocketClient(ctx, c.RemoteUrl.String(), httpClient, c.RemoteHeaders)
-	if err != nil {
-		return nil, nil, fmt.Errorf("establishing connection error: %w", err)
-	}
+
 	// todo chan for wsc and tcp accept
 	hdl.wsc = wsc
-	hdl.wsc2 = wsc2
-	return wsc, wsc2, nil
+	return wsc, nil
 }
 
 func (hdl *Handles) NegotiateVersion(ctx context.Context, remoteUrl string) error {
 	// negotiate version
-	if version, err := wss.ExchangeVersion(ctx, hdl.wsc.WsConn); err != nil {
+	if version, err := wss.ExchangeVersion(ctx, hdl.wsc[0].WsConn); err != nil {
 		return err
 	} else {
-		wss.ExchangeVersion(ctx, hdl.wsc2.WsConn) //一定要交互一次
+		for i, w := range hdl.wsc {
+			if i == 0 {
+				continue
+			}
+			wss.ExchangeVersion(ctx, w.WsConn) //一定要交互一次
+		}
 		if clientPlugin.HasVersionPlugin() {
 			if err := clientPlugin.VersionPlugin.OnServerVersion(version); err != nil {
 				return err
@@ -185,54 +176,35 @@ func (hdl *Handles) NegotiateVersion(ctx context.Context, remoteUrl string) erro
 
 func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 	// wait group wait for one of go func
-	hdl.wg.Add(3) // wait for all go func
+	hdl.wg.Add(2) // wait for all go func
 
 	// stop all connections or tasks, if one of tasks is finished.
 	closeAll := func() {
 		if hdl.cl != nil {
 			hdl.cl.Close(false)
 		}
-		if hdl.httpServer != nil {
-			hdl.httpServer.Shutdown(context.TODO())
-		}
-		if hdl.hb != nil {
-			hdl.hb.Close()
-		}
-		if hdl.hb2 != nil {
-			hdl.hb2.Close()
-		}
-		if hdl.wsc != nil {
-			hdl.wsc.Close()
-		}
-		if hdl.wsc2 != nil {
-			hdl.wsc2.Close()
+		hdl.hb.Close()
+		for _, wsc := range hdl.wsc {
+			wsc.Close()
 		}
 	}
 
-	// start websocket message listen.
-	go func() {
-		defer hdl.wg.Done()
-		defer once.Do(closeAll)
-		if err := hdl.wsc.ListenIncomeMsg(1 << 29); err != nil {
-			log.Error("error websocket read:", err)
-		}
-	}()
-
 	// 接收服务器下发消息
-	if hdl.wsc2 != nil {
+	for _, w := range hdl.wsc {
 		hdl.wg.Add(1)
 		go func() {
 			defer hdl.wg.Done()
 			defer once.Do(closeAll)
-			if err := hdl.wsc2.ListenIncomeMsg(1 << 29); err != nil {
+			if err := w.ListenIncomeMsg(1 << 29); err != nil {
 				log.Error("error websocket read:", err)
 			}
 		}()
+
 	}
 
-	// send heart beats.
 	heartbeat, hbCtx := wss.NewHeartBeat(hdl.wsc)
 	hdl.hb = heartbeat
+	// send heart beats.
 	go func() {
 		defer hdl.wg.Done()
 		defer once.Do(closeAll)
@@ -240,20 +212,6 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 			log.Info("heartbeat ending", err)
 		}
 	}()
-
-	if hdl.wsc2 != nil {
-		hdl.wg.Add(1)
-		// send heart beats.
-		heartbeat2, hbCtx2 := wss.NewHeartBeat(hdl.wsc2)
-		hdl.hb2 = heartbeat2
-		go func() {
-			defer hdl.wg.Done()
-			defer once.Do(closeAll)
-			if err := hdl.hb2.Start(hbCtx2, time.Minute); err != nil {
-				log.Info("heartbeat ending", err)
-			}
-		}()
-	}
 
 	record := wss.NewConnRecord()
 	if terminal.IsTerminal(int(os.Stdout.Fd())) {
@@ -281,7 +239,7 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 	go func() {
 		defer hdl.wg.Done()
 		defer once.Do(closeAll)
-		if err := hdl.cl.ListenAndServe(record, hdl.wsc, hdl.wsc2, c.LocalSocks5Addr, func() {
+		if err := hdl.cl.ListenAndServe(record, hdl.wsc, c.LocalSocks5Addr, func() {
 			log.WithField("socks5 listen address", c.LocalSocks5Addr).
 				Info("listening on local address for incoming proxy requests.")
 		}); err != nil {

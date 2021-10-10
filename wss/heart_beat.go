@@ -2,18 +2,19 @@ package wss
 
 import (
 	"context"
+	"time"
+
 	"github.com/segmentio/ksuid"
 	"nhooyr.io/websocket/wsjson"
-	"time"
 )
 
 type HeartBeat struct {
-	wsc      *WebSocketClient
+	wsc      []*WebSocketClient
 	cancel   context.CancelFunc
 	isClosed bool
 }
 
-func NewHeartBeat(wsc *WebSocketClient) (*HeartBeat, context.Context) {
+func NewHeartBeat(wsc []*WebSocketClient) (*HeartBeat, context.Context) {
 	hb := HeartBeat{wsc: wsc, isClosed: false}
 	ctx, can := context.WithCancel(context.Background())
 
@@ -45,7 +46,11 @@ func (hb *HeartBeat) Start(ctx context.Context, writeTimeout time.Duration) erro
 				Data: nil,
 			}
 			writeCtx, _ := context.WithTimeout(ctx, writeTimeout)
-			if err := wsjson.Write(writeCtx, hb.wsc.WsConn, heartBeats); err != nil {
+			var err error
+			for _, w := range hb.wsc {
+				err = wsjson.Write(writeCtx, w.WsConn, heartBeats)
+			}
+			if err != nil {
 				return err
 			}
 		}

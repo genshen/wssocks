@@ -80,7 +80,7 @@ func (client *Client) Reply(conn net.Conn) ([]byte, int, string, error) {
 }
 
 // listen on local address:port and forward socks5 requests to wssocks server.
-func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, wsc2 *WebSocketClient, address string, onConnected func()) error {
+func (client *Client) ListenAndServe(record *ConnRecord, wsc []*WebSocketClient, address string, onConnected func()) error {
 	netListener, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -131,9 +131,9 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, w
 			record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
 			defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
 
-			// 转换数据，看怎么分配wsc和wsc2
+			// 传输数据
 			// on connection established, copy data now.
-			if err := client.transData(wsc, wsc2, conn, firstSendData, addr); err != nil {
+			if err := client.transData(wsc, conn, firstSendData, addr); err != nil {
 				log.Error("trans error: ", err)
 			}
 		}()
@@ -141,68 +141,63 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, w
 }
 
 // 传输数据
-func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, conn *net.TCPConn, firstSendData []byte, addr string) error {
-	// create a with proxy with callback func
-	proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata 接收数据回调
-		if data.Tag == TagData {
-			clientLinkHub.Write(id, data.Data)
-		} else if data.Tag == TagEOF {
-			//fmt.Println("client receive eof")
-			clientLinkHub.Get(id).WriteEOF()
-		}
-	}, func(id ksuid.KSUID, tell bool) { //onclosed
-	}, func(id ksuid.KSUID, err error) { //onerror
-	})
+func (client *Client) transData(wsc []*WebSocketClient, conn *net.TCPConn, firstSendData []byte, addr string) error {
+	var masterProxy *ProxyClient
+	var masterID ksuid.KSUID
+	var sorted []ksuid.KSUID
+	for i, w := range wsc {
+		// create a with proxy with callback func
+		p := w.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata 接收数据回调
+			if data.Tag == TagData {
+				clientLinkHub.Write(id, data.Data)
+			} else if data.Tag == TagEOF {
+				//fmt.Println("client receive eof")
+				clientLinkHub.Get(id).WriteEOF()
+			}
+		}, func(id ksuid.KSUID, tell bool) { //onclosed
+			//服务器出错让关闭，关闭双向的通道
+			clientQueueHub.Remove(id)
+			clientLinkHub.RemoveAll(id)
+		}, func(id ksuid.KSUID, err error) { //onerror
+		})
+		defer w.RemoveProxy(p.Id)
 
-	// 第二条线
-	proxy2 := wsc2.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata 接收数据回调
-		if data.Tag == TagData {
-			clientLinkHub.Write(id, data.Data)
-		} else if data.Tag == TagEOF {
-			//fmt.Println("client receive eof")
-			clientLinkHub.Get(id).WriteEOF()
+		// 第一个做为主id
+		if i == 0 {
+			masterID = p.Id
+			masterProxy = p
 		}
-	}, func(id ksuid.KSUID, tell bool) { //onclosed
-	}, func(id ksuid.KSUID, err error) { //onerror
-	})
+		// 给主链接发送的顺序
+		sorted = append(sorted, p.Id)
+		// 让各自连接准备，对方收到后与总连接数对比决定是否开始向外转发
+		// 最好放在Establish前发送，这样Establish数据得到进行setSort时map一定存在
+		p.SayID(w, masterID)
+
+		// trans incoming data from proxy client application.
+		ctx, cancel := context.WithCancel(context.Background())
+		writer := NewWebSocketWriterWithMutex(&w.ConcurrentWebSocket, p.Id, ctx)
+		defer writer.CloseWsWriter(cancel)
+
+		clientQueueHub.Add(masterID, p.Id, writer)
+		clientLinkHub.Add(p.Id, masterID)
+	}
+
 	defer func() {
-		wsc.RemoveProxy(proxy.Id)
-		wsc2.RemoveProxy(proxy2.Id)
+		clientQueueHub.Remove(masterID)
+		clientLinkHub.RemoveAll(masterID)
 	}()
-
-	// 让各自连接准备，对方收到后与总连接数对比决定是否开始向外转发
-	// 最好放在Establish前发送，这样Establish数据得到进行setSort时map一定存在
-	proxy.SayID(wsc, proxy.Id)
-	proxy2.SayID(wsc2, proxy.Id) //都发送主id
-
-	// 给主链接发送顺序
-	sorted := []ksuid.KSUID{proxy.Id, proxy2.Id}
 
 	// 告知服务端目标地址和协议，还有首次发送的数据包, 额外告知有几路以及顺序如何
-	if err := proxy.Establish(wsc, firstSendData, addr, sorted); err != nil {
+	// 第二到N条线路不需要Establish因为不用和目标机器连接
+	if err := masterProxy.Establish(wsc[0], firstSendData, addr, sorted); err != nil {
 		return err
 	}
-	// 第二条线路不需要Establish因为不用和目标机器连接
-
-	// trans incoming data from proxy client application.
-	ctx, cancel := context.WithCancel(context.Background())
-	writer := NewWebSocketWriterWithMutex(&wsc.ConcurrentWebSocket, proxy.Id, ctx)
-
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	writer2 := NewWebSocketWriterWithMutex(&wsc2.ConcurrentWebSocket, proxy2.Id, ctx2)
-	defer func() {
-		writer.CloseWsWriter(cancel)  // cancel data writing
-		writer.CloseWsWriter(cancel2) // cancel data writing
-	}()
 
 	//发送数据
-	clientQueueHub.Add(proxy.Id, proxy.Id, writer)
-	clientQueueHub.Add(proxy.Id, proxy2.Id, writer2)
-	qq := clientQueueHub.Get(proxy.Id)
+	qq := clientQueueHub.Get(masterID)
 	// 设置发送顺序
 	qq.SetSort(sorted)
 	go qq.Send()
-	defer clientQueueHub.Remove(proxy.Id)
 
 	go func() {
 		_, err := pipe.CopyBuffer(qq, conn) //io.Copy(qq, conn)
@@ -212,11 +207,7 @@ func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, con
 	}()
 
 	//接收数据
-	clientLinkHub.Add(proxy.Id, proxy.Id)
-	clientLinkHub.Add(proxy2.Id, proxy.Id)
-	defer clientLinkHub.RemoveAll(proxy.Id)
-
-	oo := clientLinkHub.Get(proxy.Id)
+	oo := clientLinkHub.Get(masterID)
 	// 设置接收的数据发送到哪
 	oo.SetConn(conn)
 	oo.SetSort(sorted)

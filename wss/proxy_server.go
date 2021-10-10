@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -32,17 +31,11 @@ type Connector struct {
 type ProxyEstablish interface {
 	establish(hub *Hub, id ksuid.KSUID, addr string, data []byte) error
 
-	// data from client todo data with type
-	onData(id ksuid.KSUID, data ClientData) error
-
 	// close connection
-	// tell: whether to send close message to proxy client
-	Close(tell bool) error
+	Close(id ksuid.KSUID) error
 }
 
 type ClientData ServerData
-
-var ConnCloseByClient = errors.New("conn closed by client")
 
 func dispatchMessage(hub *Hub, msgType websocket.MessageType, data []byte, config WebsocksServerConfig) error {
 	if msgType == websocket.MessageText {
@@ -75,8 +68,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 	switch socketStream.Type {
 	case WsTpBeats: // heart beats
 	case WsTpClose: // closed by client
-		//serverLinkHub.Remove(id)
-		return hub.CloseProxyConn(id)
+		// 应该永远走不到这里，目前不需要客户端传close给服务端
 	case WsTpHi:
 		var masterID ksuid.KSUID
 		if err := json.Unmarshal(socketData, &masterID); err != nil {
@@ -138,34 +130,19 @@ func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
 
 	err := e.establish(hub, proxyMeta.id, proxyMeta.addr, proxyMeta.withData)
 	if err == nil {
+		// 当连接后端服务器失败时，让客户端断开
 		hub.tellClosed(proxyMeta.id) // tell client to close connection.
-	} else if err != ConnCloseByClient {
-		log.Error(err) // todo error handle better way
-		hub.tellClosed(proxyMeta.id)
 	}
-	return
-	//	log.WithField("size", s.GetConnectorSize()).Trace("connection size changed.")
-}
-
-// data type used in DefaultProxyEst to pass data to channel
-type ChanDone struct {
-	tell bool
-	err  error
 }
 
 // interface implementation for socks5 and https proxy.
 type DefaultProxyEst struct {
-	done chan ChanDone
-	//tcpConn net.Conn
 }
 
-func (e *DefaultProxyEst) onData(id ksuid.KSUID, data ClientData) error {
+func (e *DefaultProxyEst) Close(id ksuid.KSUID) error {
+	serverLinkHub.RemoveAll(id)
+	serverQueueHub.Remove(id)
 	return nil
-}
-
-func (e *DefaultProxyEst) Close(tell bool) error {
-	e.done <- ChanDone{tell, ConnCloseByClient}
-	return nil // todo error
 }
 
 // data: data send in establish step (can be nil).
@@ -178,7 +155,7 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, addr string, data 
 	serverLinkHub.TrySend(id, conn.(*net.TCPConn))
 	defer func() {
 		conn.Close()
-		serverLinkHub.RemoveAll(id)
+		e.Close(id)
 	}()
 
 	// todo check exists
@@ -194,7 +171,6 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, addr string, data 
 			log.Error("copy error,", err)
 		}
 	}()
-	defer serverQueueHub.Remove(id)
 
 	//fmt.Println(serverLinkHub.Len(), serverQueueHub.Len())
 	//time.Sleep(time.Minute)
