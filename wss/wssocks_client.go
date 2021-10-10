@@ -204,6 +204,9 @@ func (client *Client) transData(wsc []*WebSocketClient, conn *net.TCPConn, first
 		if err != nil {
 			log.Error("write error: ", err)
 		}
+		//todo 当客户端请求终端conn已经无效，可以请求服务端关闭，在回调onclose关闭自己
+		//如果服务器发送到达不了，自己直接退出。
+		//另外todo 将有连接卡住时client会关闭不了，比如请求下Google就会卡住，只能杀进程，代码在其他地方。备注在这里
 	}()
 
 	//接收数据
