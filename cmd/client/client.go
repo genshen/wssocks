@@ -43,6 +43,7 @@ func init() {
 	clientCommand.FlagSet = fs
 	clientCommand.FlagSet.StringVar(&client.address, "addr", ":1080", `listen address of socks5 proxy.`)
 	clientCommand.FlagSet.StringVar(&client.remote, "remote", "", `server address and port(e.g: ws://example.com:1088).`)
+	clientCommand.FlagSet.IntVar(&client.connectNum, "nums", 4, `connect websocket server nums.`)
 	clientCommand.FlagSet.StringVar(&client.key, "key", "", `connection key.`)
 	clientCommand.FlagSet.Var(&client.headers, "ws-header", `list of user defined http headers in websocket request. 
 (e.g: --ws-header "X-Custom-Header=some-value" --ws-header "X-Second-Header=another-value")`)
@@ -55,10 +56,11 @@ func init() {
 }
 
 type client struct {
-	address       string      // local listening address
-	remote        string      // string usr of server
-	remoteUrl     *url.URL    // url of server
-	headers       listFlags   // websocket headers passed from user.
+	address       string    // local listening address
+	remote        string    // string usr of server
+	remoteUrl     *url.URL  // url of server
+	headers       listFlags // websocket headers passed from user.
+	connectNum    int
 	remoteHeaders http.Header // parsed websocket headers (not presented in flag).
 	key           string
 	skipTLSVerify bool
@@ -99,6 +101,7 @@ func (c *client) Run() error {
 		LocalSocks5Addr: c.address,
 		RemoteUrl:       c.remoteUrl,
 		RemoteHeaders:   c.remoteHeaders,
+		ConnectNum:      c.connectNum,
 		ConnectionKey:   c.key,
 		SkipTLSVerify:   c.skipTLSVerify,
 	}

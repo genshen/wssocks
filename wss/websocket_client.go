@@ -126,6 +126,7 @@ func (wsc *WebSocketClient) ListenIncomeMsg(readLimit int64) error {
 		if ksid, err := ksuid.Parse(socketStream.Id); err != nil {
 			continue
 		} else {
+			//fmt.Println("dispatch", ksid, socketStream.Type)
 			if proxy := wsc.GetProxyById(ksid); proxy != nil {
 				// now, we known the id and type of incoming data
 				switch socketStream.Type {

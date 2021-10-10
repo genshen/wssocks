@@ -45,6 +45,7 @@ type Options struct {
 	LocalSocks5Addr string      // local listening address
 	RemoteUrl       *url.URL    // url of server
 	RemoteHeaders   http.Header // parsed websocket headers (not presented in flag).
+	ConnectNum      int         // 同时连接数
 	ConnectionKey   string      // connection key for authentication
 	SkipTLSVerify   bool        // skip TSL verify
 }
@@ -73,7 +74,9 @@ func (hdl *Handles) NotifyClose(once *sync.Once, wait bool) {
 		if hdl.cl != nil {
 			hdl.cl.Close(wait)
 		}
-		hdl.hb.Close()
+		if hdl.hb != nil {
+			hdl.hb.Close()
+		}
 		for _, wsc := range hdl.wsc {
 			wsc.Close()
 		}
@@ -113,7 +116,7 @@ func (hdl *Handles) CreateServerConn(c *Options, ctx context.Context) ([]*wss.We
 
 	var wsc []*wss.WebSocketClient
 	// start websocket connection (to remote server).
-	for i := 0; i < 4; i++ {
+	for i := 0; i < c.ConnectNum; i++ {
 		w, err := wss.NewWebSocketClient(ctx, c.RemoteUrl.String(), httpClient, c.RemoteHeaders)
 		if err != nil {
 			return nil, fmt.Errorf("establishing connection error: %w", err)
@@ -183,7 +186,9 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 		if hdl.cl != nil {
 			hdl.cl.Close(false)
 		}
-		hdl.hb.Close()
+		if hdl.hb != nil {
+			hdl.hb.Close()
+		}
 		for _, wsc := range hdl.wsc {
 			wsc.Close()
 		}
@@ -192,14 +197,13 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 	// 接收服务器下发消息
 	for _, w := range hdl.wsc {
 		hdl.wg.Add(1)
-		go func() {
+		go func(w *wss.WebSocketClient) {
 			defer hdl.wg.Done()
 			defer once.Do(closeAll)
 			if err := w.ListenIncomeMsg(1 << 29); err != nil {
 				log.Error("error websocket read:", err)
 			}
-		}()
-
+		}(w)
 	}
 
 	heartbeat, hbCtx := wss.NewHeartBeat(hdl.wsc)

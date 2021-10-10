@@ -9,7 +9,7 @@ import (
 )
 
 // 是否打开调试日志
-var pipeDebug bool = true
+var pipeDebug bool = false
 
 // 数据过期时间
 var expHour time.Duration = time.Duration(1) * time.Hour
