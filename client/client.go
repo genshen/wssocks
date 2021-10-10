@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -238,6 +239,11 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 		}
 	}
 
+	//http://127.0.0.1:5001/debug/pprof/
+	//go func() {
+	//	http.ListenAndServe(":5001", nil)
+	//}()
+
 	// start listen for socks5 and https connection.
 	hdl.cl = wss.NewClient()
 	go func() {
@@ -264,7 +270,8 @@ func (hdl *Handles) Wait(once *sync.Once) {
 				if firstInterrupt {
 					log.Println("press CTRL+C to force exit")
 					firstInterrupt = false
-					hdl.NotifyClose(once, true)
+					//放到另一个协程，否则这个函数卡住就无法接收下一次信号了
+					go hdl.NotifyClose(once, true)
 				} else {
 					os.Exit(0)
 				}

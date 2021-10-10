@@ -13,13 +13,15 @@ var pipeDebug bool = false
 
 // 数据过期时间
 var expHour time.Duration = time.Duration(1) * time.Hour
-var expTenMinute time.Duration = time.Duration(10) * time.Minute
+var expMinute time.Duration = time.Duration(1) * time.Minute
+var expFiveMinute time.Duration = time.Duration(5) * time.Minute
 
 // 状态值
 const (
-	StaWait  = "wait"
-	StaSend  = "send"
-	StaClose = "close"
+	StaWait  = "wait"  //表示Send函数还没有执行
+	StaSend  = "send"  //表示Send函数正在执行
+	StaDone  = "done"  //表示Send函数已经退出
+	StaClose = "close" //表示close函数已经执行
 )
 
 type PipeWriter interface {
@@ -33,7 +35,7 @@ type buffer struct {
 }
 
 // CopyBuffer 传输数据
-func CopyBuffer(iow PipeWriter, conn *net.TCPConn) (written int64, err error) {
+func CopyBuffer(pw PipeWriter, conn *net.TCPConn) (written int64, err error) {
 	//如果设置过大会耗内存高，4k比较合理
 	size := 4 * 1024
 	if pipeDebug {
@@ -48,7 +50,7 @@ func CopyBuffer(iow PipeWriter, conn *net.TCPConn) (written int64, err error) {
 			//fmt.Println("copy read", nr)
 			var nw int
 			var ew error
-			nw, ew = iow.Write(buf[0:nr])
+			nw, ew = pw.Write(buf[0:nr])
 			if nw > 0 {
 				written += int64(nw)
 			}
@@ -62,8 +64,9 @@ func CopyBuffer(iow PipeWriter, conn *net.TCPConn) (written int64, err error) {
 			}
 		}
 		if er == io.EOF {
+			// 请求正常结束或客户端curl被ctrl+c断开都能走到这边
 			//fmt.Println(time.Now(), "copy get and write eof")
-			iow.WriteEOF()
+			pw.WriteEOF()
 			break
 		} else if er != nil {
 			err = fmt.Errorf("#3 %s", er.Error())

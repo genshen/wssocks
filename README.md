@@ -47,10 +47,10 @@ ssh -o ProxyCommand='nc -x 127.0.0.1:1080 %h %p' user@example.com
 And set your socks5 server address as `:1080` in your socks5 client (such as [proxifier](https://www.proxifier.com/) or proxy setting in mac's network preferences) if you need to use socks5 proxy in more situations, not only `ssh` in terminal.  
 
 ### *多通道*
-*默认将使用4个通道并发发送数据，你可以通过`--num`指定（最小值为1）*
+*默认将使用4个通道并发发送数据，你可以通过`--nums`指定（最小值为1）*
 ```bash
 # client siede
-wssocks client --addr :1080 --remote ws://example.com:1088 --num 10
+wssocks client --addr :1080 --remote ws://example.com:1088 --nums 10
 ```
 
 ## Advanced usage

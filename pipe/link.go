@@ -44,25 +44,14 @@ func (q *link) SetSort(sort []ksuid.KSUID) {
 	q.sorted = sort
 }
 
-// 设置EOF
-func (q *link) WriteEOF() {
-	defer func() {
-		// 捕获异常
-		if err := recover(); err != nil {
-			pipePrintln("link.writer recover", err)
-			return
-		}
-	}()
-	q.buffer <- buffer{eof: true, data: []byte{}}
-}
-
 // 发送数据
 func (q *link) Send(hub *LinkHub) error {
 	// 如果已经在发送，返回
-	if q.status == StaSend {
+	if q.status == StaSend || q.status == StaDone {
 		return nil
 	}
 	defer func() {
+		q.status = StaDone
 		q.done <- struct{}{}
 		close(q.done)
 	}()
@@ -82,7 +71,7 @@ func (q *link) Send(hub *LinkHub) error {
 					conn = mq.conn
 				}
 
-				b, err := readWithTimeout(q.buffer, expTenMinute)
+				b, err := readWithTimeout(q.buffer, expFiveMinute)
 				if err != nil {
 					return err
 				}
@@ -111,19 +100,38 @@ func (q *link) Send(hub *LinkHub) error {
 	}
 }
 
-// 写入缓冲区数据
+// 写入缓冲区
 func (q *link) Write(data []byte) (n int, err error) {
-	defer func() {
-		// 捕获异常
-		if err := recover(); err != nil {
-			pipePrintln("link.write recover", err)
-			return
-		}
-	}()
 	b := make([]byte, len(data))
 	copy(b, data)
-	q.buffer <- buffer{eof: false, data: b}
-	return len(data), nil
+	return q.writeBuf(buffer{eof: false, data: b})
+}
+
+// 发送EOF
+func (q *link) WriteEOF() {
+	q.writeBuf(buffer{eof: true, data: []byte{}})
+}
+
+// 基础方法
+func (q *link) writeBuf(b buffer) (n int, err error) {
+	if q.status == StaDone {
+		return 0, errors.New("send is over")
+	}
+
+	go func() {
+		defer func() {
+			// 捕获异常
+			if err := recover(); err != nil {
+				pipePrintln("queue.writer recover", err)
+				return
+			}
+		}()
+		select {
+		case <-time.After(expMinute):
+		case q.buffer <- b:
+		}
+	}()
+	return len(b.data), nil
 }
 
 // 堵塞等待
@@ -141,9 +149,9 @@ func (q *link) close(id ksuid.KSUID) {
 		close(q.buffer)
 	}
 	// 是主连接
-	if id == q.master && q.conn != nil {
-		q.conn.Close()
-	}
+	//if id == q.master && q.conn != nil {
+	//	q.conn.Close()
+	//}
 }
 
 type LinkHub struct {
@@ -208,16 +216,6 @@ func (h *LinkHub) Get(id ksuid.KSUID) *link {
 		return q
 	}
 	return nil
-}
-
-// 写数据
-func (h *LinkHub) Write(id ksuid.KSUID, data []byte) (n int, err error) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	if q, ok := h.links[id]; ok {
-		return q.Write(data)
-	}
-	return 0, errors.New("link.hub link not found")
 }
 
 // 设置连接传输顺序

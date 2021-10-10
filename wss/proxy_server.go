@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -105,10 +106,13 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 			fmt.Println("json", err)
 			return err
 		}
-
+		link := serverLinkHub.Get(id)
+		if link == nil {
+			return errors.New("link not found")
+		}
 		if requestMsg.Tag == TagEOF { //设置收到io.EOF结束符
 			//fmt.Println("server receive eof")
-			serverLinkHub.Get(id).WriteEOF()
+			link.WriteEOF()
 			return nil
 		}
 		if decodeBytes, err := base64.StdEncoding.DecodeString(requestMsg.DataBase64); err != nil {
@@ -117,7 +121,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 		} else {
 			//fmt.Println("bytes", id, len(decodeBytes), string(decodeBytes))
 			// 传输数据
-			serverLinkHub.Write(id, decodeBytes)
+			link.Write(decodeBytes)
 			return nil
 		}
 	}
@@ -164,14 +168,15 @@ func (e *DefaultProxyEst) establish(hub *Hub, id ksuid.KSUID, addr string, data 
 
 	serverQueueHub.TrySend(id)
 	writer := serverQueueHub.Get(id)
-	go func() {
-		// 从外面往回接收数据
-		_, err := pipe.CopyBuffer(writer, conn.(*net.TCPConn))
-		if err != nil {
-			log.Error("copy error,", err)
-		}
-	}()
-
+	if writer != nil {
+		go func() {
+			// 从外面往回接收数据
+			_, err := pipe.CopyBuffer(writer, conn.(*net.TCPConn))
+			if err != nil {
+				log.Error("copy error,", err)
+			}
+		}()
+	}
 	//fmt.Println(serverLinkHub.Len(), serverQueueHub.Len())
 	//time.Sleep(time.Minute)
 	//fmt.Println("wait")
