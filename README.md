@@ -54,10 +54,11 @@ wssocks client --addr :1080 --remote ws://example.com:1088 --num 10
 ```
 
 ## Advanced usage
-~~### enable http and https proxy~~
+### ~~enable http and https proxy~~
+*因为懒得对http也开发多通道支持，而且感觉不是必须，干脆删除*
+
 ~~You can also enable http and https proxy by `--http` option(in client side)~~
 ~~if http(s) proxy in server side is enabled:~~
-*因为懒得对http也开发多通道支持，而且感觉不是必须，干脆删除*
 
 ```bash
 # client siede
@@ -65,8 +66,7 @@ wssocks client --addr :1080 --remote ws://example.com:1088 --num 10
 ```
 ~~The http proxy listen address is specified by `--http-addr` in client side (default value is `:1086`),~~
 ~~and https proxy listen address is the same as socks5 proxy listen address(specified by `--addr` option).~~
-
-~~Then you can set server address of http and https proxy as `:1080` ~~
+~~Then you can set server address of http and https proxy as `:1080`~~
 ~~in your http(s) proxy client (e.g. mac's network preferences).~~
 
 note: http(s) proxy is enabled by default in server side, you can disable it in server side 
