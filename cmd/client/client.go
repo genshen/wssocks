@@ -76,6 +76,9 @@ func (c *client) PreRun() error {
 	} else {
 		c.remoteUrl = u
 	}
+	if c.connectNum < 1 {
+		c.connectNum = 1
+	}
 
 	// check header format.
 	c.remoteHeaders = make(http.Header)
@@ -116,7 +119,7 @@ func (c *client) Run() error {
 	// server connect successfully
 	log.WithFields(log.Fields{
 		"remote": c.remoteUrl.String(),
-	}).Info("connected to wssocks server.")
+	}).Info(fmt.Sprintf("connected to wssocks server(%d).", c.connectNum))
 	defer func() {
 		for _, w := range wsc {
 			w.WSClose()
