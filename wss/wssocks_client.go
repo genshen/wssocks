@@ -7,18 +7,19 @@ import (
 	"net"
 	"sync"
 
+	"github.com/genshen/wssocks/pipe"
 	"github.com/segmentio/ksuid"
 	log "github.com/sirupsen/logrus"
 )
 
 var StoppedError = errors.New("listener stopped")
 
-var clientQueueHub *queueHub
-var clientBackHub *queueHub2
+var clientQueueHub *pipe.QueueHub
+var clientLinkHub *pipe.LinkHub
 
 func init() {
-	clientQueueHub = NewQueueHub()
-	clientBackHub = NewQueueHub2()
+	clientQueueHub = pipe.NewQueueHub()
+	clientLinkHub = pipe.NewLinkHub()
 }
 
 // client part of wssocks
@@ -37,7 +38,7 @@ func NewClient() *Client {
 }
 
 // parse target address and proxy type, and response to socks5/https client
-func (client *Client) Reply(conn net.Conn, enableHttp bool) ([]byte, int, string, error) {
+func (client *Client) Reply(conn net.Conn) ([]byte, int, string, error) {
 	var buffer [1024]byte
 	var addr string
 	var proxyType int
@@ -47,11 +48,9 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool) ([]byte, int, string
 		return nil, 0, "", err
 	}
 
+	// 去掉socks5之外的支持
 	// select a matched proxy type
 	instances := []ProxyInterface{&Socks5Client{}}
-	if enableHttp { // if http and https proxy is enabled.
-		instances = append(instances, &HttpsClient{})
-	}
 	var matchedInstance ProxyInterface = nil
 	for _, proxyInstance := range instances {
 		if proxyInstance.Trigger(buffer[:n]) {
@@ -61,7 +60,7 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool) ([]byte, int, string
 	}
 
 	if matchedInstance == nil {
-		return nil, 0, "", errors.New("only socks5 or http(s) proxy")
+		return nil, 0, "", errors.New("only socks5 proxy")
 	}
 
 	// set address and type
@@ -81,7 +80,7 @@ func (client *Client) Reply(conn net.Conn, enableHttp bool) ([]byte, int, string
 }
 
 // listen on local address:port and forward socks5 requests to wssocks server.
-func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, wsc2 *WebSocketClient, address string, enableHttp bool, onConnected func()) error {
+func (client *Client) ListenAndServe(record *ConnRecord, wsc []*WebSocketClient, address string, onConnected func()) error {
 	netListener, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
@@ -92,9 +91,10 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, w
 	}
 	client.tcpl = tcpl
 
+	// 在client刚启动，连上ws server以后要做的事
 	onConnected()
 	for {
-		// check stop first
+		// 先检查stop 如果已经被close 不再接收新请求
 		select {
 		case <-client.stop:
 			return StoppedError
@@ -112,138 +112,112 @@ func (client *Client) ListenAndServe(record *ConnRecord, wsc *WebSocketClient, w
 			// defer c.Close()
 			defer conn.Close()
 			// In reply, we can get proxy type, target address and first send data.
-			firstSendData, proxyType, addr, err := client.Reply(conn, enableHttp)
+			firstSendData, proxyType, addr, err := client.Reply(conn)
 			if err != nil {
 				log.Error("reply error: ", err)
 			}
+			// 在client.Close中使用wait等待
 			client.wgClose.Add(1)
 			defer client.wgClose.Done()
 
-			// update connection record
+			switch proxyType {
+			case ProxyTypeSocks5:
+				conn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+			case ProxyTypeHttps:
+				conn.Write([]byte("HTTP/1.0 200 Connection Established\r\nProxy-agent: wssocks\r\n\r\n"))
+			}
+
+			// 更新输出区域的连接数据
 			record.Update(ConnStatus{IsNew: true, Address: addr, Type: proxyType})
 			defer record.Update(ConnStatus{IsNew: false, Address: addr, Type: proxyType})
 
-			// 转换数据，看怎么分配wsc和wsc2
+			// 传输数据
 			// on connection established, copy data now.
-			if err := client.transData(wsc, wsc2, conn, firstSendData, proxyType, addr); err != nil {
+			if err := client.transData(wsc, conn, firstSendData, addr); err != nil {
 				log.Error("trans error: ", err)
 			}
 		}()
 	}
 }
 
-func (client *Client) transData(wsc *WebSocketClient, wsc2 *WebSocketClient, conn *net.TCPConn, firstSendData []byte, proxyType int, addr string) error {
-	type Done struct {
-		tell bool
-		err  error
-	}
-	done := make(chan Done, 3)
-	// defer close(done)
-
-	// create a with proxy with callback func
-	proxy := wsc.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata
-		if data.Tag == TagHandshake {
-			if _, err := conn.Write(data.Data); err != nil {
-				clientBackHub.GetById(id).Close()
+// 传输数据
+func (client *Client) transData(wsc []*WebSocketClient, conn *net.TCPConn, firstSendData []byte, addr string) error {
+	var masterProxy *ProxyClient
+	var masterID ksuid.KSUID
+	var sorted []ksuid.KSUID
+	for i, w := range wsc {
+		// create a with proxy with callback func
+		p := w.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata 接收数据回调
+			if data.Tag == TagData {
+				clientLinkHub.Write(id, data.Data)
+			} else if data.Tag == TagEOF {
+				//fmt.Println("client receive eof")
+				clientLinkHub.Get(id).WriteEOF()
 			}
-		} else {
-			clientBackHub.GetById(id).setData(data.Data)
-		}
-	}, func(id ksuid.KSUID, tell bool) { //onclosed
-		done <- Done{tell, nil}
-	}, func(id ksuid.KSUID, err error) { //onerror
-		if err != nil {
-			done <- Done{true, err}
-		}
-	})
+		}, func(id ksuid.KSUID, tell bool) { //onclosed
+			//服务器出错让关闭，关闭双向的通道
+			clientQueueHub.Remove(id)
+			clientLinkHub.RemoveAll(id)
+		}, func(id ksuid.KSUID, err error) { //onerror
+		})
+		defer w.RemoveProxy(p.Id)
 
-	// 第二条线
-	proxy2 := wsc2.NewProxy(func(id ksuid.KSUID, data ServerData) { //ondata
-		if data.Tag == TagHandshake {
-			if _, err := conn.Write(data.Data); err != nil {
-				clientBackHub.GetById(id).Close()
-			}
-		} else {
-			clientBackHub.GetById(id).setData(data.Data)
+		// 第一个做为主id
+		if i == 0 {
+			masterID = p.Id
+			masterProxy = p
 		}
-	}, func(id ksuid.KSUID, tell bool) { //onclosed
-		done <- Done{tell, nil}
-	}, func(id ksuid.KSUID, err error) { //onerror
-		if err != nil {
-			done <- Done{true, err}
-		}
-	})
+		// 给主链接发送的顺序
+		sorted = append(sorted, p.Id)
+		// 让各自连接准备，对方收到后与总连接数对比决定是否开始向外转发
+		// 最好放在Establish前发送，这样Establish数据得到进行setSort时map一定存在
+		p.SayID(w, masterID)
 
-	// 让各自连接准备开始
-	proxy.SayID(wsc, proxy.Id)
-	proxy2.SayID(wsc2, proxy.Id) //都发送主id
-	//fmt.Println("client say", proxy.Id, proxy2.Id)
+		// trans incoming data from proxy client application.
+		ctx, cancel := context.WithCancel(context.Background())
+		writer := NewWebSocketWriterWithMutex(&w.ConcurrentWebSocket, p.Id, ctx)
+		defer writer.CloseWsWriter(cancel)
 
-	// 给主链接顺序
-	sorted := []ksuid.KSUID{proxy.Id, proxy2.Id}
-
-	// 告知服务端目标地址和协议，还有首次发送的数据包, 额外告知有几路以及顺序如何
-	// tell server to establish connection
-	//fmt.Println("firstSend", firstSendData)
-	if err := proxy.Establish(wsc, firstSendData, proxyType, addr, sorted); err != nil {
-		wsc.RemoveProxy(proxy.Id)
-		if err := wsc.TellClose(proxy.Id); err != nil {
-			log.Error("close error", err)
-		}
-		return err
+		clientQueueHub.Add(masterID, p.Id, writer)
+		clientLinkHub.Add(p.Id, masterID)
 	}
-	// 第二条线路不需要Establish因为不用和目标机器连接
 
-	// trans incoming data from proxy client application.
-	ctx, cancel := context.WithCancel(context.Background())
-	writer := NewWebSocketWriterWithMutex(&wsc.ConcurrentWebSocket, proxy.Id, ctx)
-
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	writer2 := NewWebSocketWriterWithMutex(&wsc2.ConcurrentWebSocket, proxy2.Id, ctx2)
-
-	clientQueueHub.addWriter(proxy.Id, proxy.Id, writer)
-	clientQueueHub.addWriter(proxy.Id, proxy2.Id, writer2)
-	qq := clientQueueHub.GetById(proxy.Id)
-	qq.SetSort(sorted)
-	go qq.Send()
-	defer qq.Close()
-
-	clientBackHub.addBufQueue(proxy.Id, proxy.Id)
-	clientBackHub.addBufQueue(proxy2.Id, proxy.Id)
-	clientBackHub.SetMap(proxy.Id, proxy.Id)  //?有用
-	clientBackHub.SetMap(proxy2.Id, proxy.Id) //?有用
-	oo := clientBackHub.GetById(proxy.Id)
-	oo.SetConn(conn)
-	oo.SetSort(sorted)
-	go func() {
-		err := oo.Send(clientBackHub)
-		done <- Done{true, err}
+	defer func() {
+		clientQueueHub.Remove(masterID)
+		clientLinkHub.RemoveAll(masterID)
 	}()
 
+	// 告知服务端目标地址和协议，还有首次发送的数据包, 额外告知有几路以及顺序如何
+	// 第二到N条线路不需要Establish因为不用和目标机器连接
+	if err := masterProxy.Establish(wsc[0], firstSendData, addr, sorted); err != nil {
+		return err
+	}
+
+	//发送数据
+	qq := clientQueueHub.Get(masterID)
+	// 设置发送顺序
+	qq.SetSort(sorted)
+	go qq.Send()
+
 	go func() {
-		_, err := copyBuffer(qq, conn) //io.Copy(qq, conn) //client.copyBuffer(qq, conn)
+		_, err := pipe.CopyBuffer(qq, conn) //io.Copy(qq, conn)
 		if err != nil {
 			log.Error("write error: ", err)
 		}
-		done <- Done{true, nil}
 	}()
-	defer writer.CloseWsWriter(cancel)  // cancel data writing
-	defer writer.CloseWsWriter(cancel2) // cancel data writing
 
-	d := <-done
-	wsc.RemoveProxy(proxy.Id)
-	wsc2.RemoveProxy(proxy2.Id)
-	if d.tell { //出错了
-		if err := wsc.TellClose(proxy.Id); err != nil {
-			return err
-		}
-		if err := wsc2.TellClose(proxy2.Id); err != nil {
-			return err
-		}
-	}
-	if d.err != nil {
-		return d.err
-	}
+	//接收数据
+	oo := clientLinkHub.Get(masterID)
+	// 设置接收的数据发送到哪
+	oo.SetConn(conn)
+	oo.SetSort(sorted)
+	go oo.Send(clientLinkHub)
+
+	//fmt.Println(clientLinkHub.Len(), clientQueueHub.Len())
+	//time.Sleep(time.Minute)
+	//fmt.Println("wait")
+	oo.Wait()
+	//fmt.Println("done")
 	return nil
 }
 

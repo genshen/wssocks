@@ -69,7 +69,6 @@ type ProxyData struct {
 
 // Proxy message for establishing connection
 type ProxyEstMessage struct {
-	Type       int           `json:"proxy_type"`
 	Addr       string        `json:"addr"`
 	Sorted     []ksuid.KSUID `json:"sorted"`
 	WithData   bool          `json:"with_data"`

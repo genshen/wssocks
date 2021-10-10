@@ -77,3 +77,16 @@ func (writer *webSocketWriter) Write(buffer []byte) (n int, err error) {
 		return len(buffer), nil
 	}
 }
+
+// 连接关闭
+func (writer *webSocketWriter) WriteEOF() {
+	if writer.Mu != nil {
+		writer.Mu.Lock()
+		defer writer.Mu.Unlock()
+	}
+	// make sure context is not Canceled/DeadlineExceeded before Write.
+	if writer.Ctx.Err() != nil {
+		return
+	}
+	writer.WSC.WriteProxyMessage(writer.Ctx, writer.Id, TagEOF, []byte{})
+}

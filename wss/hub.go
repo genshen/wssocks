@@ -2,9 +2,10 @@ package wss
 
 import (
 	"context"
+	"sync"
+
 	"github.com/segmentio/ksuid"
 	"nhooyr.io/websocket/wsjson"
-	"sync"
 )
 
 type ProxyServer struct {
@@ -24,7 +25,6 @@ type Hub struct {
 
 type ProxyRegister struct {
 	id       ksuid.KSUID
-	_type    int
 	addr     string
 	withData []byte
 }
@@ -34,7 +34,7 @@ func (h *Hub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for id, proxy := range h.connPool {
-		proxy.ProxyIns.Close(false)
+		proxy.ProxyIns.Close(id)
 		delete(h.connPool, id)
 	}
 }
@@ -60,15 +60,6 @@ func (h *Hub) GetConnectorSize() int {
 	// h.mu.RLock()
 	// defer h.mu.RUnlock()
 	return len(h.connPool)
-}
-
-// Close proxy connection with remote host.
-// It can be called when receiving tell close message from client
-func (h *Hub) CloseProxyConn(id ksuid.KSUID) error {
-	if proxy := h.GetProxyById(id); proxy != nil {
-		return proxy.ProxyIns.Close(false) // todo remove proxy here
-	}
-	return nil
 }
 
 func (h *Hub) RemoveProxy(id ksuid.KSUID) {
