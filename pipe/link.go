@@ -93,7 +93,7 @@ func (q *link) Send(hub *LinkHub) error {
 					return nil
 				}
 				if conn != nil {
-					pipePrintln("link.send from:", id, "send:", string(b.data))
+					pipePrintln("link.send from:", id, "data:", string(b.data))
 					_, e := conn.Write(b.data)
 					if e != nil {
 						pipePrintln("link.send write", e.Error())
