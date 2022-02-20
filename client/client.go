@@ -9,6 +9,7 @@ import (
 	"github.com/genshen/wssocks/wss/term_view"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sync/errgroup"
 	"net"
 	"net/http"
 	"net/url"
@@ -56,14 +57,15 @@ type Handles struct {
 	httpServer *http.Server
 	cl         *wss.Client
 	closed     bool
-	wg         *sync.WaitGroup
+	eg         *errgroup.Group
 }
 
 func NewClientHandles() *Handles {
-	return &Handles{closed: true, wg: &sync.WaitGroup{}}
+	eg, _ := errgroup.WithContext(context.Background())
+	return &Handles{closed: true, eg: eg}
 }
 
-// send closing message to all running tasks
+// NotifyClose send closing message to all running tasks
 func (hdl *Handles) NotifyClose(once *sync.Once, wait bool) {
 	if hdl.closed {
 		return
@@ -87,7 +89,7 @@ func (hdl *Handles) NotifyClose(once *sync.Once, wait bool) {
 	})
 }
 
-// create a server websocket connection based on user options.
+// CreateServerConn create a server websocket connection based on user options.
 func (hdl *Handles) CreateServerConn(c *Options, ctx context.Context) (*wss.WebSocketClient, error) {
 	if c.ConnectionKey != "" {
 		c.RemoteHeaders.Set("Key", c.ConnectionKey)
@@ -171,9 +173,6 @@ func (hdl *Handles) NegotiateVersion(ctx context.Context, remoteUrl string) erro
 }
 
 func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
-	// wait group wait for one of go func
-	hdl.wg.Add(3) // wait for all go func
-
 	// stop all connections or tasks, if one of tasks is finished.
 	closeAll := func() {
 		if hdl.cl != nil {
@@ -191,23 +190,23 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 	}
 
 	// start websocket message listen.
-	go func() {
-		defer hdl.wg.Done()
+	hdl.eg.Go(func() error {
 		defer once.Do(closeAll)
 		if err := hdl.wsc.ListenIncomeMsg(1 << 29); err != nil {
-			log.Error("error websocket read:", err)
+			return fmt.Errorf("error websocket read %w", err)
 		}
-	}()
+		return nil
+	})
 	// send heart beats.
 	heartbeat, hbCtx := wss.NewHeartBeat(hdl.wsc)
 	hdl.hb = heartbeat
-	go func() {
-		defer hdl.wg.Done()
+	hdl.eg.Go(func() error {
 		defer once.Do(closeAll)
 		if err := hdl.hb.Start(hbCtx, time.Minute); err != nil {
-			log.Info("heartbeat ending", err)
+			return fmt.Errorf("heartbeat ending %w", err)
 		}
-	}()
+		return nil
+	})
 
 	record := wss.NewConnRecord()
 	if terminal.IsTerminal(int(os.Stdout.Fd())) {
@@ -232,24 +231,22 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 
 	// http listening
 	if c.HttpEnabled {
-		hdl.wg.Add(1)
 		log.WithField("http listen address", c.LocalHttpAddr).
 			Info("listening on local address for incoming proxy requests.")
-		go func() {
-			defer hdl.wg.Done()
+		hdl.eg.Go(func() error {
 			defer once.Do(closeAll)
 			handle := wss.NewHttpProxy(hdl.wsc, record)
 			hdl.httpServer = &http.Server{Addr: c.LocalHttpAddr, Handler: &handle}
 			if err := hdl.httpServer.ListenAndServe(); err != nil {
-				log.Errorln(err)
+				return err
 			}
-		}()
+			return nil
+		})
 	}
 
 	// start listen for socks5 and https connection.
 	hdl.cl = wss.NewClient()
-	go func() {
-		defer hdl.wg.Done()
+	hdl.eg.Go(func() error {
 		defer once.Do(closeAll)
 		if err := hdl.cl.ListenAndServe(record, hdl.wsc, c.LocalSocks5Addr, c.HttpEnabled, func() {
 			if c.HttpEnabled {
@@ -261,13 +258,20 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 					Info("listening on local address for incoming proxy requests.")
 			}
 		}); err != nil {
-			log.Errorln(err)
+			return fmt.Errorf("start client error %w", err)
 		}
-	}()
+		return nil
+	})
+
 	hdl.closed = false
 }
 
-func (hdl *Handles) Wait(once *sync.Once) {
+func (hdl *Handles) Wait(once *sync.Once) error {
+	return hdl.eg.Wait()
+}
+
+// CliWait can be used in cli env to wait service to finish.
+func (hdl *Handles) CliWait(once *sync.Once) {
 	go func() {
 		firstInterrupt := true
 		c := make(chan os.Signal, 1)
@@ -286,7 +290,11 @@ func (hdl *Handles) Wait(once *sync.Once) {
 		}
 	}()
 
-	hdl.wg.Wait() // wait all tasks finished
+	// wait all tasks finished
+	if err := hdl.eg.Wait(); err != nil {
+		log.Errorln(err)
+	}
+
 	// about exit: 1. press ctrl+c, it will wait active connection to finish.
 	// 2. press twice, force exit.
 	// 3. one of tasks error, exit immediately.
