@@ -134,6 +134,6 @@ func (c *client) Run() error {
 
 	var once sync.Once
 	hdl.StartClient(&options, &once)
-	hdl.Wait(&once)
+	hdl.CliWait(&once)
 	return nil
 }
