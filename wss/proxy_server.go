@@ -107,7 +107,7 @@ func dispatchDataMessage(hub *Hub, data []byte, config WebsocksServerConfig) err
 func establishProxy(hub *Hub, proxyMeta ProxyRegister) {
 	var e ProxyEstablish
 	if proxyMeta._type == ProxyTypeHttp {
-		e = &HttpProxyEst{}
+		e = makeHttpProxyInstance()
 	} else {
 		e = &DefaultProxyEst{}
 	}
@@ -195,6 +195,11 @@ type HttpProxyEst struct {
 	bodyReadCloser *BufferedWR
 }
 
+func makeHttpProxyInstance() *HttpProxyEst {
+	buf := NewBufferWR()
+	return &HttpProxyEst{bodyReadCloser: buf}
+}
+
 func (h *HttpProxyEst) onData(data ClientData) error {
 	if data.Tag == TagNoMore {
 		return h.bodyReadCloser.Close() // close due to no more data.
@@ -224,10 +229,9 @@ func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr s
 	defer close(client)
 
 	hub.addNewProxy(&ProxyServer{Id: id, ProxyIns: h})
-	bodyReadCloser := NewBufferWR()
 	defer hub.RemoveProxy(id)
 	defer func() {
-		if !bodyReadCloser.isClosed() { // if it is not closed by client.
+		if !h.bodyReadCloser.isClosed() { // if it is not closed by client.
 			hub.tellClosed(id) // todo
 		}
 	}()
@@ -244,7 +248,7 @@ func (h *HttpProxyEst) establish(hub *Hub, id ksuid.KSUID, proxyType int, addr s
 	if err != nil {
 		return err
 	}
-	req.Body = bodyReadCloser
+	req.Body = h.bodyReadCloser
 
 	// read request and copy response back
 	resp, err := http.DefaultTransport.RoundTrip(req)
