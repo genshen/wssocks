@@ -266,11 +266,15 @@ func (hdl *Handles) StartClient(c *Options, once *sync.Once) {
 	hdl.closed = false
 }
 
-func (hdl *Handles) Wait(once *sync.Once) error {
+
+// Wait waits an error in client connection.
+// If the connection lost or any other connection error happens, Wait will return an error.
+func (hdl *Handles) Wait() error {
 	return hdl.eg.Wait()
 }
 
 // CliWait can be used in cli env to wait service to finish.
+// similar to Wait, but CliWait is usually used in cli.
 func (hdl *Handles) CliWait(once *sync.Once) {
 	go func() {
 		firstInterrupt := true
