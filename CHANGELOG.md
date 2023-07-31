@@ -1,4 +1,50 @@
 
+<a name="v0.6.0"></a>
+## [v0.6.0](https://github.com/genshen/wssocks/compare/v0.5.0...v0.6.0)
+
+> 2023-07-31
+
+### Build
+
+* **gomodule:** bump go packages to latest
+* **gomodule:** bump package golang.org/x/crypto and golang.org/x/sync to fix building error
+* **gomodule:** update dependencies version
+* **makefile:** add darwin-arm64 building in Makefile
+* **npm:** bump react-scripts to v5 to fix "error:0308010C:digital envelope routines::unsupported"
+* **status:** bump dependencies version in yarn.lock
+* **status:** bump evergreen-ui to 6.5.1
+
+### Ci
+
+* **github-action:** bump gh-actions version: go, node, actions of setup-go, setup-node and checkout
+* **github-action:** create Release via github action
+* **github-action:** bump node to 16.x and go to 1.18 in github action
+
+### Docs
+
+* **changelog:** add changelog for version 0.6.0
+
+### Feat
+
+* **client:** remove the unused parameter `*sync.Once` in `Handles.Wait` of client
+* **client:** add ability to catch error from any tasks in main goroutine
+* **version:** bump version to v0.6.0
+
+### Fix
+
+* **client:** fix the incorrect error passing in client side data transmission
+* **server:** fix bug of server side crashing when using http/https proxy
+
+### Merge
+
+* **client:** Merge pull request [#69](https://github.com/genshen/wssocks/issues/69) from genshen/remove-client-Wait-parameter
+* **client:** Merge pull request [#68](https://github.com/genshen/wssocks/issues/68) from genshen/fix-error-passing-in-client
+* **client:** Merge pull request [#54](https://github.com/genshen/wssocks/issues/54) from genshen/feature-client-wait-with-error
+* **github-action:** Merge pull request [#67](https://github.com/genshen/wssocks/issues/67) from genshen/ci-create-release
+* **server:** Merge pull request [#57](https://github.com/genshen/wssocks/issues/57) from genshen/fix-http-proxy-panic
+* **status:** Merge pull request [#45](https://github.com/genshen/wssocks/issues/45) from genshen/bump-status-web-dependencies
+
+
 <a name="v0.5.0"></a>
 ## [v0.5.0](https://github.com/genshen/wssocks/compare/v0.5.0-rc.3...v0.5.0)
 
