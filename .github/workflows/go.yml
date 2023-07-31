@@ -4,7 +4,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - name: Setup Node.js
@@ -31,4 +31,31 @@ jobs:
       run: cd cmd/server && statik --src=../../status-web/build/ && cd ../../
 
     - name: Build
-      run: go build -v .
+      run: make
+    - uses: actions/upload-artifact@v3
+      with:
+        name: build-artifact
+        path: wssocks-*
+
+  release:
+    name: On Release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: build-artifact
+#      - run: ls -R
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            wssocks-linux-amd64
+            wssocks-linux-arm64
+            wssocks-darwin-amd64
+            wssocks-darwin-arm64
+            wssocks-windows-amd64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
