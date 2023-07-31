@@ -4,22 +4,22 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
 
     - name: Setup Node.js
-      uses: actions/setup-node@v1
+      uses: actions/setup-node@v3
       with:
-        node-version: '16.x'
+        node-version: '18.17.0'
 
-    - name: Set up Go 1.18
-      uses: actions/setup-go@v2
+    - name: Set up Go 1.20
+      uses: actions/setup-go@v4
       with:
-        go-version: 1.18
+        go-version: '1.20'
       id: go
 
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Build static status page
       run: cd status-web && yarn && yarn build && cd ../
@@ -31,4 +31,31 @@ jobs:
       run: cd cmd/server && statik --src=../../status-web/build/ && cd ../../
 
     - name: Build
-      run: go build -v .
+      run: make
+    - uses: actions/upload-artifact@v3
+      with:
+        name: build-artifact
+        path: wssocks-*
+
+  release:
+    name: On Release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: build-artifact
+#      - run: ls -R
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            wssocks-linux-amd64
+            wssocks-linux-arm64
+            wssocks-darwin-amd64
+            wssocks-darwin-arm64
+            wssocks-windows-amd64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
