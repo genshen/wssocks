@@ -147,7 +147,8 @@ func (client *Client) transData(wsc *WebSocketClient, conn *net.TCPConn, firstSe
 	// tell server to establish connection
 	if err := proxy.Establish(wsc, firstSendData, proxyType, addr); err != nil {
 		wsc.RemoveProxy(proxy.Id)
-		if err := wsc.TellClose(proxy.Id); err != nil {
+        err := wsc.TellClose(proxy.Id)
+        if err != nil {
 			log.Error("close error", err)
 		}
 		return err
@@ -161,7 +162,7 @@ func (client *Client) transData(wsc *WebSocketClient, conn *net.TCPConn, firstSe
 		if err != nil {
 			log.Error("write error: ", err)
 		}
-		done <- Done{true, nil}
+        done <- Done{true, err}
 	}()
 	defer writer.CloseWsWriter(cancel) // cancel data writing
 
