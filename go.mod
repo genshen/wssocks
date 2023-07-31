@@ -1,6 +1,10 @@
 module github.com/genshen/wssocks
 
-go 1.13
+go 1.16
+
+retract (
+  v0.6.0
+)
 
 require (
 	github.com/genshen/cmds v0.0.0-20200505065256-d4c52690e15b
