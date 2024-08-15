@@ -3,7 +3,7 @@ PACKAGE=github.com/genshen/wssocks
 .PHONY: clean all
 
 
-LDFLAGS= -v -ldflags "-X 'github.com/genshen/wssocks/version.buildHash=`git rev-parse HEAD`' \
+LDFLAGS= -v -ldflags "-s -w -X 'github.com/genshen/wssocks/version.buildHash=`git rev-parse HEAD`' \
  -X 'github.com/genshen/wssocks/version.buildTime=`date`' \
  -X 'github.com/genshen/wssocks/version.buildGoVersion=`go version | cut -f 3,4 -d" "`'"
 
